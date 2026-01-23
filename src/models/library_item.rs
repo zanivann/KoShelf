@@ -34,17 +34,13 @@ pub enum LibraryItemFormat {
 }
 
 impl LibraryItemFormat {
-    /// Try to detect format from a file path's extension
-    /// Handles compound extensions like .fb2.zip
     pub fn from_path(path: &Path) -> Option<Self> {
         let filename = path.file_name()?.to_str()?.to_lowercase();
 
-        // Check for compound extensions first (e.g., .fb2.zip)
         if filename.ends_with(".fb2.zip") {
             return Some(Self::Fb2);
         }
 
-        // Then check simple extensions
         let ext = path.extension()?.to_str()?.to_lowercase();
         match ext.as_str() {
             "epub" => Some(Self::Epub),
@@ -57,7 +53,6 @@ impl LibraryItemFormat {
         }
     }
 
-    /// Get the KOReader metadata filename for this format
     pub fn metadata_filename(&self) -> &'static str {
         match self {
             Self::Epub => "metadata.epub.lua",
@@ -68,7 +63,6 @@ impl LibraryItemFormat {
         }
     }
 
-    /// Check if a filename is a KOReader metadata file for any supported format
     pub fn is_metadata_file(filename: &str) -> bool {
         matches!(
             filename,
@@ -80,7 +74,6 @@ impl LibraryItemFormat {
         )
     }
 
-    /// Get the content type for this format
     pub fn content_type(&self) -> ContentType {
         match self {
             Self::Epub | Self::Fb2 | Self::Mobi => ContentType::Book,
@@ -100,7 +93,6 @@ impl Identifier {
         Self { scheme, value }
     }
 
-    /// Get a display-friendly version of the scheme name
     pub fn display_scheme(&self) -> String {
         match self.scheme.to_lowercase().as_str() {
             "isbn" => "ISBN".to_string(),
@@ -117,7 +109,6 @@ impl Identifier {
         }
     }
 
-    /// Get the URL for this identifier if it can be linked
     pub fn url(&self) -> Option<String> {
         match self.scheme.to_lowercase().as_str() {
             "isbn" => Some(format!("https://www.worldcat.org/isbn/{}", self.value)),
@@ -132,8 +123,6 @@ impl Identifier {
             "doi" => Some(format!("https://doi.org/{}", self.value)),
             "kobo" => Some(format!("https://www.kobo.com/ebook/{}", self.value)),
             "oclc" => Some(format!("https://www.worldcat.org/oclc/{}", self.value)),
-            // For hardcover identifiers, the value is already normalized to the path segment
-            // e.g., "the-coldest-touch" or "the-coldest-touch/editions/30409163"
             "hardcover" | "hardcover-edition" => {
                 Some(format!("https://hardcover.app/books/{}", self.value))
             }
@@ -141,7 +130,6 @@ impl Identifier {
         }
     }
 
-    /// Check if this identifier can be linked to an external service
     pub fn is_linkable(&self) -> bool {
         self.url().is_some()
     }
@@ -231,7 +219,6 @@ impl LibraryItem {
     }
 
     pub fn doc_pages(&self) -> Option<u32> {
-        // Prefer KOReader metadata pages, fall back to format-extracted pages
         self.koreader_metadata
             .as_ref()
             .and_then(|m| m.doc_pages)
@@ -247,7 +234,6 @@ impl LibraryItem {
             .unwrap_or(0)
     }
 
-    /// Get language, preferring EPUB metadata over KoReader metadata
     pub fn language(&self) -> Option<&String> {
         self.book_info.language.as_ref().or_else(|| {
             self.koreader_metadata
@@ -256,19 +242,14 @@ impl LibraryItem {
         })
     }
 
-    /// Get publisher from EPUB metadata
     pub fn publisher(&self) -> Option<&String> {
         self.book_info.publisher.as_ref()
     }
 
-    /// Get identifiers normalized for display and linking.
-    /// This includes Hardcover normalization and edition linking.
     pub fn identifiers(&self) -> Vec<Identifier> {
         let mut result: Vec<Identifier> = Vec::new();
-        // Tracks (scheme_lowercase, value) pairs to avoid duplicate identifiers
         let mut dedupe_keys: HashSet<(String, String)> = HashSet::new();
 
-        // 1) Add normalized Hardcover identifiers
         for id in self.get_normalized_hardcover_identifiers() {
             let key = (id.scheme.to_lowercase(), id.value.clone());
             if dedupe_keys.insert(key) {
@@ -276,7 +257,6 @@ impl LibraryItem {
             }
         }
 
-        // 2) Add all other identifiers as-is (skip raw Hardcover family)
         for id in &self.book_info.identifiers {
             let scheme_lc = id.scheme.to_lowercase();
             if scheme_lc == "hardcover"
@@ -291,19 +271,16 @@ impl LibraryItem {
             }
         }
 
-        // Keep only identifiers with a recognized display scheme
         result
             .into_iter()
             .filter(|id| id.display_scheme() != id.scheme)
             .collect()
     }
 
-    /// Get subjects/genres from EPUB metadata
     pub fn subjects(&self) -> &Vec<String> {
         &self.book_info.subjects
     }
 
-    /// Get a formatted display string for subjects/genres
     pub fn subjects_display(&self) -> Option<String> {
         if self.book_info.subjects.is_empty() {
             None
@@ -312,13 +289,9 @@ impl LibraryItem {
         }
     }
 
-    /// Get normalized Hardcover-related identifiers (slug and editions).
-    /// - Picks slug from `hardcover` or `hardcover-slug` and emits a single `hardcover` entry
-    /// - Emits `hardcover-edition` as `{slug}/editions/{editionId}` only when slug exists
     fn get_normalized_hardcover_identifiers(&self) -> Vec<Identifier> {
         let mut out: Vec<Identifier> = Vec::new();
 
-        // Find Hardcover slug from either scheme
         let slug = self
             .book_info
             .identifiers
@@ -330,9 +303,7 @@ impl LibraryItem {
             .map(|id| id.value.clone());
 
         if let Some(slug_val) = slug {
-            // Normalized hardcover slug
             out.push(Identifier::new("hardcover".to_string(), slug_val.clone()));
-            // Normalized hardcover editions
             for id in &self.book_info.identifiers {
                 if id.scheme.eq_ignore_ascii_case("hardcover-edition") {
                     out.push(Identifier::new(
@@ -346,17 +317,14 @@ impl LibraryItem {
         out
     }
 
-    /// Get series information from EPUB metadata
     pub fn series(&self) -> Option<&String> {
         self.book_info.series.as_ref()
     }
 
-    /// Get series number from EPUB metadata
     pub fn series_number(&self) -> Option<&String> {
         self.book_info.series_number.as_ref()
     }
 
-    /// Get formatted series display (e.g., "Series Name #1")
     pub fn series_display(&self) -> Option<String> {
         match (self.series(), self.series_number()) {
             (Some(series), Some(number)) => Some(format!("{} #{}", series, number)),
@@ -365,17 +333,14 @@ impl LibraryItem {
         }
     }
 
-    /// Get the content type of this book
     pub fn content_type(&self) -> ContentType {
         self.format.content_type()
     }
 
-    /// Check if this is a comic (CBZ/CBR)
     pub fn is_comic(&self) -> bool {
         self.content_type() == ContentType::Comic
     }
 
-    /// Check if this is a book (EPUB/FB2/MOBI)
     pub fn is_book(&self) -> bool {
         self.content_type() == ContentType::Book
     }
@@ -388,11 +353,11 @@ pub struct BookInfo {
     pub description: Option<String>,
     pub language: Option<String>,
     pub publisher: Option<String>,
-    pub identifiers: Vec<Identifier>, // Changed from single identifier to vector
-    pub subjects: Vec<String>,        // Genres/subjects/tags
+    pub identifiers: Vec<Identifier>,
+    pub subjects: Vec<String>,
     pub series: Option<String>,
     pub series_number: Option<String>,
-    pub pages: Option<u32>, // Page count from format (EPUB page-list, comic images)
+    pub pages: Option<u32>,
     pub cover_data: Option<Vec<u8>>,
     pub cover_mime_type: Option<String>,
 }

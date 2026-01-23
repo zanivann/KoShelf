@@ -83,6 +83,9 @@ icu_locid = "1.4"
 fluent = "0.16"
 fluent-bundle = "0.15"
 intl-memoizer = "0.5"
+actix-web = "4.12.1"
+actix-files = "0.6.9"
+actix-cors = "0.7.1"
 
 [target.'cfg(not(windows))'.dependencies]
 # CBR/RAR archive extraction (not supported on Windows)

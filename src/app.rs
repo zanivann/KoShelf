@@ -5,8 +5,9 @@ use crate::server::{WebServer, create_version_notifier};
 use crate::site_generator::SiteGenerator;
 use crate::time_config::TimeConfig;
 use anyhow::{Context, Result};
-use log::info;
+use log::{info, error};
 use tempfile::TempDir;
+use std::sync::Arc;
 
 enum RunMode {
     StaticExport,
@@ -16,7 +17,6 @@ enum RunMode {
 
 struct OutputPlan {
     output_dir: std::path::PathBuf,
-    /// Keep alive for Serve mode so the temp directory is cleaned up on exit.
     _temp_dir: Option<TempDir>,
     mode: RunMode,
 }
@@ -34,7 +34,6 @@ fn plan_output(cli: &Cli) -> Result<OutputPlan> {
             mode: RunMode::WatchStatic,
         }),
         (None, _) => {
-            // For server mode, generate into a temp directory that is cleaned up on exit.
             let tmp = tempfile::tempdir().context("Failed to create temporary output directory")?;
             Ok(OutputPlan {
                 output_dir: tmp.path().to_path_buf(),
@@ -55,40 +54,18 @@ fn metadata_location(cli: &Cli) -> MetadataLocation {
     }
 }
 
-/// Run KoShelf with the provided CLI args.
-///
-/// `src/main.rs` is responsible for logging init and Clap argument parsing.
 pub async fn run(cli: Cli) -> Result<()> {
     info!("Starting KOShelf...");
-
     cli.validate()?;
 
-    // Parse heatmap scale max
-    let heatmap_scale_max = parse_time_to_seconds(&cli.heatmap_scale_max).with_context(|| {
-        format!(
-            "Invalid heatmap-scale-max format: {}",
-            cli.heatmap_scale_max
-        )
-    })?;
+    let heatmap_scale_max = parse_time_to_seconds(&cli.heatmap_scale_max)?;
+    let min_time_per_day = if let Some(ref t) = cli.min_time_per_day {
+        parse_time_to_seconds(t)?
+    } else { None };
 
-    // Parse min time per day
-    let min_time_per_day = if let Some(ref min_time_str) = cli.min_time_per_day {
-        parse_time_to_seconds(min_time_str)
-            .with_context(|| format!("Invalid min-time-per-day format: {}", min_time_str))?
-    } else {
-        None
-    };
-
-    // Build time configuration from CLI
     let time_config = TimeConfig::from_cli(&cli.timezone, &cli.day_start_time)?;
-
-    // Determine output directory + run mode
     let plan = plan_output(&cli)?;
 
-    // Determine if we're running with internal web server (enables long-polling)
-    let is_internal_server = matches!(plan.mode, RunMode::Serve);
-
-    // Create site config - bundles all generation options
     let config = SiteConfig {
         output_dir: plan.output_dir.clone(),
         site_title: cli.title.clone(),
@@ -101,52 +78,45 @@ pub async fn run(cli: Cli) -> Result<()> {
         min_pages_per_day: cli.min_pages_per_day,
         min_time_per_day,
         include_all_stats: cli.include_all_stats,
-        is_internal_server,
+        is_internal_server: matches!(plan.mode, RunMode::Serve),
         language: cli.language.clone(),
     };
 
-    // Create site generator - it will handle book scanning and stats loading internally
     let site_generator = SiteGenerator::new(config.clone());
-
-    // Generate initial site
     site_generator.generate().await?;
+    
+    let scanner = crate::library::scanner::Scanner::new(config.clone());
+    let library_items = Arc::new(scanner.scan().await?);
 
     match plan.mode {
         RunMode::StaticExport => Ok(()),
-
         RunMode::WatchStatic => {
-            info!("Starting file watcher mode for static output");
             let file_watcher = FileWatcher::new(config, None);
-            if let Err(e) = file_watcher.run().await {
-                log::error!("File watcher error: {}", e);
-            }
+            file_watcher.run().await.map_err(|e| { error!("{}", e); e })?;
             Ok(())
         }
-
         RunMode::Serve => {
-            // Create shared version notifier for long-polling
             let version_notifier = create_version_notifier();
+            let file_watcher = FileWatcher::new(config.clone(), Some(version_notifier.clone()));
+            
+            // Pegamos o primeiro caminho da biblioteca fornecido via CLI
+            // No seu caso: /Users/helder/Documents/Projetos/koshelf/Livros
+            let library_path = cli.library_path.first().cloned().unwrap_or_default();
 
-            // Start file watcher with version notifier
-            let file_watcher = FileWatcher::new(config, Some(version_notifier.clone()));
+            let web_server = WebServer::new(
+                plan.output_dir, 
+                cli.port, 
+                version_notifier, 
+                library_items,
+                library_path // Este é o 5º argumento
+            );
 
-            // Start web server with version notifier
-            let web_server = WebServer::new(plan.output_dir, cli.port, version_notifier);
+            info!("Server mode active. Port: {}", cli.port);
 
-            // Run both file watcher and web server concurrently
             tokio::select! {
-                result = file_watcher.run() => {
-                    if let Err(e) = result {
-                        log::error!("File watcher error: {}", e);
-                    }
-                }
-                result = web_server.run() => {
-                    if let Err(e) = result {
-                        log::error!("Web server error: {}", e);
-                    }
-                }
+                res = file_watcher.run() => { if let Err(e) = res { error!("Watcher: {}", e); } }
+                res = web_server.run() => { if let Err(e) = res { error!("Server: {}", e); } }
             }
-
             Ok(())
         }
     }
