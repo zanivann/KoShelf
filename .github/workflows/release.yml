@@ -5,119 +5,50 @@ on:
     tags:
       - "v*"
 
-env:
-  CARGO_TERM_COLOR: always
-  BIN_NAME: koshelf
-
 jobs:
-  build:
-    name: Build (${{ matrix.target }})
-    runs-on: ${{ matrix.os }}
+  release:
+    runs-on: ubuntu-latest
 
     strategy:
-      fail-fast: false
       matrix:
-        include:
-          # Linux x86_64
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-gnu
-            archive: tar.gz
-
-          # Linux ARM64 (Raspberry Pi 4/5 64-bit)
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            archive: tar.gz
-
-          # Windows (MSVC)
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            archive: zip
-
-          # macOS Intel
-          - os: macos-latest
-            target: x86_64-apple-darwin
-            archive: tar.gz
-
-          # macOS Apple Silicon
-          - os: macos-latest
-            target: aarch64-apple-darwin
-            archive: tar.gz
+        target:
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
+          - x86_64-apple-darwin
+          - aarch64-apple-darwin
+          - x86_64-pc-windows-msvc
 
     steps:
       - uses: actions/checkout@v4
 
-      # Rust
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
-      # Node.js (OBRIGATÓRIO para o build.rs)
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
+      - name: Install cross
+        run: cargo install cross
 
-      # Toolchain ARM GNU (Linux)
-      - name: Install Linux ARM toolchain
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      # Build
       - name: Build
-        run: cargo build --release --target ${{ matrix.target }}
-
-      # Package + checksum
-      - name: Package
-        shell: bash
         run: |
-          VERSION="${GITHUB_REF_NAME}"
-          OUT="release"
-          mkdir -p "$OUT"
+          cross build --release --target ${{ matrix.target }}
 
-          BIN="${BIN_NAME}"
-          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            BIN="${BIN_NAME}.exe"
-          fi
+      - name: Package
+        run: |
+          mkdir dist
+          BIN=koshelf
+          TARGET=${{ matrix.target }}
 
-          cp "target/${{ matrix.target }}/release/$BIN" .
-
-          ARCHIVE="koshelf-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"
-
-          if [[ "${{ matrix.archive }}" == "zip" ]]; then
-            zip "$ARCHIVE" "$BIN"
+          if [[ "$TARGET" == *windows* ]]; then
+            cp target/$TARGET/release/$BIN.exe dist/
           else
-            tar czf "$ARCHIVE" "$BIN"
+            cp target/$TARGET/release/$BIN dist/
           fi
 
-          if command -v sha256sum >/dev/null 2>&1; then
-            sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
-          else
-            shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
-          fi
+          tar -czf dist/$BIN-$TARGET.tar.gz -C dist .
 
-          mv "$ARCHIVE" "$ARCHIVE.sha256" "$OUT/"
+          shasum -a 256 dist/$BIN-$TARGET.tar.gz > dist/$BIN-$TARGET.tar.gz.sha256
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}
-          path: release/*
-
-  release:
-    name: Create GitHub Release
-    needs: build
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: dist
-
-      - name: Create GitHub Release (draft)
+      - name: Create Release (draft)
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: dist/**/*
+          files: dist/*

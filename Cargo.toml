@@ -1,9 +1,9 @@
 [package]
 name = "koshelf"
-version = "2.0.36"
+version = "2.0.37"
 description = "Transform your KOReader library into a beautiful reading dashboard with statistics."
-repository = "https://github.com/paviro/KOShelf"
-license = "EUPL-1.2 license"
+repository = "https://github.com/zanivann/KoShelf"
+license = "EUPL-1.2"
 authors = ["Paul-Vincent Roll"]
 edition = "2024"
 build = "build.rs"
@@ -35,7 +35,7 @@ notify = "8.0.0"
 tempfile = "3.20.0"
 
 # EPUB and .fb2.zip parsing
-zip = "6"
+zip = "0.6"
 
 # Image processing
 image = { version = "0.25.6", default-features = false, features = [
@@ -124,3 +124,4 @@ fluent-syntax = "0.11"
 opt-level = 3
 lto = true
 codegen-units = 1
+panic = "abort"
