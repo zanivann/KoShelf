@@ -66,6 +66,9 @@ jobs:
 
           RUSTFLAGS: ${{ contains(matrix.target, 'linux-musl') && '-C link-arg=-lgcc -C link-arg=-static-libgcc' || '' }}
 
+          KOSHELF_SKIP_NPM_INSTALL: "1"
+          KOSHELF_SKIP_NODE_BUILD: "1"
+
       - name: Empacotar (Unix)
         if: matrix.os != 'windows-latest'
         run: |
