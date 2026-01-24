@@ -1,4 +1,4 @@
-name: Release
+name: Release Multi-Plataforma
 
 on:
   push:
@@ -7,9 +7,8 @@ on:
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build para ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
-
     strategy:
       fail-fast: false
       matrix:
@@ -44,22 +43,32 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: dtolnay/rust-toolchain@stable
+      # CORREÇÃO: Instala Node.js e npm necessários para o build.rs
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Instalar Rust
+        uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
+      # Necessário para cross-compilation no Linux (alvos ARM e Musl)
       - name: Install cross (Linux only)
         if: runner.os == 'Linux'
         run: cargo install cross --locked
 
       - name: Build
+        shell: bash
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
+            # Cross já gerencia os linkers de C/C++ internos para Musl e ARM
             cross build --release --target ${{ matrix.target }}
           else
             cargo build --release --target ${{ matrix.target }}
           fi
-        shell: bash
 
       - name: Package
         shell: bash
@@ -70,7 +79,7 @@ jobs:
             EXT=".exe"
           fi
 
-          mkdir dist
+          mkdir -p dist
           cp target/${{ matrix.target }}/release/$BIN$EXT dist/
 
           if [ "${{ matrix.archive }}" = "tar.gz" ]; then
@@ -82,11 +91,10 @@ jobs:
       - name: SHA256
         shell: bash
         run: |
-          if ls *.tar.gz 1> /dev/null 2>&1; then
-            shasum -a 256 *.tar.gz >> SHA256SUMS
-          fi
-          if ls *.zip 1> /dev/null 2>&1; then
-            shasum -a 256 *.zip >> SHA256SUMS
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            certutil -hashfile koshelf-${{ matrix.target }}.zip SHA256 >> SHA256SUMS
+          else
+            shasum -a 256 koshelf-${{ matrix.target }}.* >> SHA256SUMS
           fi
 
       - uses: actions/upload-artifact@v4
@@ -101,6 +109,8 @@ jobs:
     name: Publish Draft Release
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # Necessário para criar a release
 
     steps:
       - uses: actions/download-artifact@v4
