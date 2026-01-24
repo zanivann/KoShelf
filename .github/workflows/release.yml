@@ -6,50 +6,110 @@ on:
       - "v*"
 
 jobs:
-  build-linux:
-    name: Build Linux x86_64 (GNU)
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            archive: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-musl
+            archive: tar.gz
+
+          # macOS
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Install system dependencies
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (Linux only)
+        if: runner.os == 'Linux'
+        run: cargo install cross --locked
+
+      - name: Build
         run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            build-essential \
-            cmake \
-            pkg-config \
-            libssl-dev
+          if [ "${{ runner.os }}" = "Linux" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
+        shell: bash
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Package
+        shell: bash
+        run: |
+          BIN=koshelf
+          EXT=""
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            EXT=".exe"
+          fi
 
-      - name: Build release
-        run: cargo build --release
+          mkdir dist
+          cp target/${{ matrix.target }}/release/$BIN$EXT dist/
 
-      - name: Strip binary
-        run: strip target/release/koshelf || true
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            tar -czf koshelf-${{ matrix.target }}.tar.gz -C dist .
+          else
+            cd dist && zip ../koshelf-${{ matrix.target }}.zip *
+          fi
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - name: SHA256
+        shell: bash
+        run: |
+          if ls *.tar.gz 1> /dev/null 2>&1; then
+            shasum -a 256 *.tar.gz >> SHA256SUMS
+          fi
+          if ls *.zip 1> /dev/null 2>&1; then
+            shasum -a 256 *.zip >> SHA256SUMS
+          fi
+
+      - uses: actions/upload-artifact@v4
         with:
-          name: koshelf-linux-x86_64
-          path: target/release/koshelf
+          name: artifacts-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.zip
+            SHA256SUMS
 
-  github-release:
-    name: Create GitHub Release
-    needs: build-linux
+  release:
+    name: Publish Draft Release
+    needs: build
     runs-on: ubuntu-latest
 
     steps:
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: koshelf-linux-x86_64
+      - uses: actions/download-artifact@v4
 
-      - name: Publish release
+      - name: Publish draft
         uses: softprops/action-gh-release@v2
         with:
-          files: koshelf
+          draft: true
+          files: |
+            **/*.tar.gz
+            **/*.zip
+            **/SHA256SUMS
