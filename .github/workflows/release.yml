@@ -3,47 +3,107 @@ name: Release Binaries
 on:
   push:
     tags:
-      - 'v*' # Dispara quando você cria uma tag como v1.8.1
+      - 'v*' # Dispara em tags como v1.8.1
 
 jobs:
   build:
-    name: Build for ${{ matrix.target }}
+    name: Build ${{ matrix.asset_name }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         include:
+          # Linux x86_64 (Servidores Padrão)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: koshelf
-            asset_name: linux-x86_64
+            asset_name: koshelf-linux-x86_64
+            use_cross: false
+            archive_ext: .tar.gz
+
+          # Linux ARM64 (Raspberry Pi / CasaOS) - ADICIONADO
+          # Requer 'cross' para compilar
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: koshelf
+            asset_name: koshelf-linux-arm64
+            use_cross: true
+            archive_ext: .tar.gz
+
+          # Windows x86_64 (Usa MSVC para melhor compatibilidade com unrar/zstd)
           - os: windows-latest
-            target: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-msvc
             artifact_name: koshelf.exe
-            asset_name: windows-x86_64
+            asset_name: koshelf-windows-x86_64
+            use_cross: false
+            archive_ext: .zip
+
+          # macOS ARM64 (Apple Silicon M1/M2/M3)
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: koshelf
-            asset_name: macos-arm64
+            asset_name: koshelf-macos-arm64
+            use_cross: false
+            archive_ext: .tar.gz
 
     steps:
       - uses: actions/checkout@v4
+
+      # 1. SETUP NODE.JS (Crucial para o seu build.rs e Tailwind)
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install NPM Dependencies
+        run: npm install
+
+      # 2. SETUP RUST
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-      
+
+      # 3. SETUP CROSS (Apenas para Linux ARM64)
+      - name: Install Cross
+        if: matrix.use_cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      # 4. BUILD
       - name: Build Binary
-        run: cargo build --release --target ${{ matrix.target }}
-
-      - name: Archive Binary
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar -czf ../../../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
         shell: bash
-
-      - name: Upload to Release
-        uses: softprops/action-gh-release@v1
-        with:
-          files: ${{ matrix.asset_name }}.tar.gz
+        run: |
+          if [ "${{ matrix.use_cross }}" == "true" ]; then
+            cross build --release --target ${{ matrix.target }}
+          else
+            cargo build --release --target ${{ matrix.target }}
+          fi
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pula o download de fontes no CI para acelerar
+          KOSHELF_SKIP_FONT_DOWNLOAD: "true"
+
+      # 5. EMPACOTAR (Usa 7zip no Windows, tar nos outros)
+      - name: Archive Binary
+        shell: bash
+        run: |
+          mkdir -p dist
+          # Copia o binário gerado para a pasta dist
+          cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} dist/
+          
+          cd dist
+          if [ "${{ matrix.os }}" == "windows-latest" ]; then
+            # Windows usa zip
+            7z a ../${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
+          else
+            # Unix usa tar.gz
+            tar -czf ../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+          fi
+
+      # 6. UPLOAD PARA O GITHUB RELEASES
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            ${{ matrix.asset_name }}${{ matrix.archive_ext }}
