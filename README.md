@@ -578,4 +578,4 @@ Special thanks to:
 
 ## Disclaimer
 
-This is a weekend project and was built for personal use - it relies heavily on AI-generated code. While I've tested everything and use it daily, I take no responsibility for any issues you might encounter. Use at your own risk.
+As the original author said: This is a weekend project and was built for personal use - it relies heavily on AI-generated code. While I've tested everything and use it daily, I take no responsibility for any issues you might encounter. Use at your own risk.

@@ -477,4 +477,4 @@ Agradecimentos especiais a:
 
 ## Aviso Legal
 
-Este é um projeto de fim de semana, desenvolvido para uso pessoal, e depende fortemente de código gerado por IA. Embora eu tenha testado tudo e o utilize diariamente, não me responsabilizo por quaisquer problemas que você possa encontrar. Use por sua conta e risco.
+Assim como o autor original: Este é um projeto de fim de semana, desenvolvido para uso pessoal, e depende fortemente de código gerado por IA. Embora eu tenha testado tudo e o utilize diariamente, não me responsabilizo por quaisquer problemas que você possa encontrar. Use por sua conta e risco.
