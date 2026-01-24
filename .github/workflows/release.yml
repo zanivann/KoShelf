@@ -1,4 +1,4 @@
-name: Release Multi-Plataforma
+name: Release
 
 on:
   push:
@@ -7,13 +7,13 @@ on:
 
 jobs:
   build:
-    name: Build para ${{ matrix.target }}
+    name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux
+          # Linux (Usa Cross para gerenciar dependências nativas automaticamente)
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             archive: tar.gz
@@ -27,7 +27,7 @@ jobs:
             target: aarch64-unknown-linux-musl
             archive: tar.gz
 
-          # macOS
+          # macOS (Nativo)
           - os: macos-latest
             target: x86_64-apple-darwin
             archive: tar.gz
@@ -35,7 +35,7 @@ jobs:
             target: aarch64-apple-darwin
             archive: tar.gz
 
-          # Windows
+          # Windows (Nativo)
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             archive: zip
@@ -43,19 +43,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # CORREÇÃO: Instala Node.js e npm necessários para o build.rs
+      # Configura Node.js para o build.rs processar Tailwind/TS
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
+      - name: Install npm dependencies
+        run: npm install
+
       - name: Instalar Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      # Necessário para cross-compilation no Linux (alvos ARM e Musl)
       - name: Install cross (Linux only)
         if: runner.os == 'Linux'
         run: cargo install cross --locked
@@ -64,11 +66,14 @@ jobs:
         shell: bash
         run: |
           if [ "${{ runner.os }}" = "Linux" ]; then
-            # Cross já gerencia os linkers de C/C++ internos para Musl e ARM
+            # Cross usa containers Docker que já possuem os compiladores C++ corretos
             cross build --release --target ${{ matrix.target }}
           else
             cargo build --release --target ${{ matrix.target }}
           fi
+        env:
+          # Garante que o build.rs saiba que estamos em um ambiente de CI
+          KOSHELF_SKIP_FONT_DOWNLOAD: "true" 
 
       - name: Package
         shell: bash
@@ -110,7 +115,7 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
-      contents: write # Necessário para criar a release
+      contents: write
 
     steps:
       - uses: actions/download-artifact@v4
