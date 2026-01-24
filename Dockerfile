@@ -2,7 +2,7 @@
 FROM rustlang/rust:nightly-slim AS builder
 WORKDIR /app
 
-# Instala dependências de sistema e Node.js 20 (necessário para o CSS/JS)
+# Instala dependências de sistema e Node.js
 RUN apt-get update && apt-get install -y \
     pkg-config libssl-dev libsqlite3-dev build-essential git curl \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -11,11 +11,10 @@ RUN apt-get update && apt-get install -y \
 
 COPY . .
 
-# 1. Instalamos as dependências do Node primeiro
+# 1. Instalamos as dependências do Node para que o build.rs funcione
 RUN npm install
 
-# 2. Agora o cargo build vai conseguir rodar o build.rs 
-# que gera automaticamente o compiled_style.css e os .js
+# 2. O cargo build compila o binário e embuti o CSS/JS automaticamente
 RUN cargo build --release
 
 # Estágio Final
@@ -26,9 +25,11 @@ RUN apt-get update && apt-get install -y \
     libssl3 libsqlite3-0 ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Copiamos apenas o binário, que já contém o frontend embutido
 COPY --from=builder /app/target/release/koshelf /usr/local/bin/koshelf
-# O KoShelf precisa da pasta dist para servir imagens/icones
-COPY --from=builder /app/dist ./dist 
+
+# Criamos uma pasta dist vazia apenas para evitar erros de inicialização do servidor
+RUN mkdir -p dist
 
 EXPOSE 3009
 ENTRYPOINT ["koshelf"]
