@@ -23,11 +23,7 @@ jobs:
             target: x86_64-unknown-linux-gnu
             archive: tar.gz
 
-          - os: ubuntu-latest
-            target: x86_64-unknown-linux-musl
-            archive: tar.gz
-
-          # Linux ARM64 (GNU only)
+          # Linux ARM64 (Raspberry Pi 4/5 64-bit)
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             archive: tar.gz
@@ -50,29 +46,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # Rust
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      # ---------- Linux toolchains ----------
-      - name: Install Linux toolchains
-        if: matrix.os == 'ubuntu-latest'
+      # Node.js (OBRIGATÓRIO para o build.rs)
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      # Toolchain ARM GNU (Linux)
+      - name: Install Linux ARM toolchain
+        if: matrix.os == 'ubuntu-latest' && matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
 
-          if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
-            sudo apt-get install -y musl-tools
-          fi
-
-          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu
-          fi
-      # -------------------------------------
-
+      # Build
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
 
+      # Package + checksum
       - name: Package
         shell: bash
         run: |
