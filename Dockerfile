@@ -1,8 +1,8 @@
-# Estágio de Build
-FROM rust:1.84-slim AS builder
+# Estágio de Build usando Rust Nightly
+FROM rustlang/rust:nightly-slim AS builder
 WORKDIR /app
 
-# Instalando dependências de sistema para SQLite e SSL
+# Instalando dependências essenciais para SQLite e compilação
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
@@ -13,22 +13,22 @@ RUN apt-get update && apt-get install -y \
 
 COPY . .
 
-# Compilação em modo Release
+# Habilita funcionalidades instáveis do Cargo se necessário e compila
 RUN cargo build --release
 
-# Estágio Final
+# Estágio Final para o Raspberry Pi 5
 FROM debian:bookworm-slim
 WORKDIR /app
 
-# Dependências de runtime
+# Dependências de execução (runtime)
 RUN apt-get update && apt-get install -y \
     libssl3 \
     libsqlite3-0 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Copia o binário e a pasta do frontend
 COPY --from=builder /app/target/release/koshelf /usr/local/bin/koshelf
-# O KoShelf geralmente precisa da pasta dist para o frontend
 COPY --from=builder /app/dist ./dist 
 
 EXPOSE 3009
