@@ -36,6 +36,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Instalar Node.js (necessário para build.rs)
+        uses: actions/setup-node@v4
+        with:
+        node-version: '20'
+
       - name: Instalar Rust
         uses: dtolnay/rust-toolchain@stable
         with:
