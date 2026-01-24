@@ -3,7 +3,7 @@ name: Release Binaries
 on:
   push:
     tags:
-      - 'v*' # Dispara em tags como v1.8.1
+      - 'v*'
 
 jobs:
   build:
@@ -13,7 +13,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Linux x86_64 (Servidores Padrão)
+          # Linux x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: koshelf
@@ -21,8 +21,7 @@ jobs:
             use_cross: false
             archive_ext: .tar.gz
 
-          # Linux ARM64 (Raspberry Pi / CasaOS) - ADICIONADO
-          # Requer 'cross' para compilar
+          # Linux ARM64 (Raspberry Pi / CasaOS)
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             artifact_name: koshelf
@@ -30,7 +29,7 @@ jobs:
             use_cross: true
             archive_ext: .tar.gz
 
-          # Windows x86_64 (Usa MSVC para melhor compatibilidade com unrar/zstd)
+          # Windows x86_64
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: koshelf.exe
@@ -38,7 +37,7 @@ jobs:
             use_cross: false
             archive_ext: .zip
 
-          # macOS ARM64 (Apple Silicon M1/M2/M3)
+          # macOS ARM64 (Apple Silicon)
           - os: macos-latest
             target: aarch64-apple-darwin
             artifact_name: koshelf
@@ -49,7 +48,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. SETUP NODE.JS (Crucial para o seu build.rs e Tailwind)
+      # 1. SETUP NODE.JS
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -65,7 +64,7 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # 3. SETUP CROSS (Apenas para Linux ARM64)
+      # 3. SETUP CROSS (Linux ARM64)
       - name: Install Cross
         if: matrix.use_cross
         run: cargo install cross --git https://github.com/cross-rs/cross
@@ -79,28 +78,23 @@ jobs:
           else
             cargo build --release --target ${{ matrix.target }}
           fi
-        env:
-          # Pula o download de fontes no CI para acelerar
-          KOSHELF_SKIP_FONT_DOWNLOAD: "true"
+        # REMOVIDO: KOSHELF_SKIP_FONT_DOWNLOAD para permitir que o build.rs baixe as fontes necessárias
 
-      # 5. EMPACOTAR (Usa 7zip no Windows, tar nos outros)
+      # 5. EMPACOTAR
       - name: Archive Binary
         shell: bash
         run: |
           mkdir -p dist
-          # Copia o binário gerado para a pasta dist
           cp target/${{ matrix.target }}/release/${{ matrix.artifact_name }} dist/
           
           cd dist
           if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            # Windows usa zip
             7z a ../${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
           else
-            # Unix usa tar.gz
             tar -czf ../${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
           fi
 
-      # 6. UPLOAD PARA O GITHUB RELEASES
+      # 6. UPLOAD RELEASE
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
