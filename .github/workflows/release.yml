@@ -5,50 +5,104 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 jobs:
-  release:
-    runs-on: ubuntu-latest
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
 
     strategy:
+      fail-fast: false
       matrix:
-        target:
-          - x86_64-unknown-linux-gnu
-          - aarch64-unknown-linux-gnu
-          - x86_64-apple-darwin
-          - aarch64-apple-darwin
-          - x86_64-pc-windows-msvc
+        include:
+          # Linux x86_64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            archive: tar.gz
+
+          # Raspberry Pi (ARM64 glibc)
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            archive: tar.gz
+
+          # macOS Intel
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            archive: tar.gz
+
+          # macOS Apple Silicon
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            archive: tar.gz
+
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            archive: zip
 
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
-      - name: Install cross
-        run: cargo install cross
+      - name: Install cross dependencies (Linux ARM)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt update
+          sudo apt install -y gcc-aarch64-linux-gnu
 
       - name: Build
-        run: |
-          cross build --release --target ${{ matrix.target }}
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package
+        shell: bash
         run: |
-          mkdir dist
-          BIN=koshelf
+          BIN_NAME=koshelf
           TARGET=${{ matrix.target }}
+          VERSION=${GITHUB_REF_NAME}
 
-          if [[ "$TARGET" == *windows* ]]; then
-            cp target/$TARGET/release/$BIN.exe dist/
+          mkdir dist
+          cp target/$TARGET/release/$BIN_NAME* dist/
+
+          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
+            tar -czf koshelf-${VERSION}-${TARGET}.tar.gz -C dist .
           else
-            cp target/$TARGET/release/$BIN dist/
+            powershell Compress-Archive dist/* koshelf-${VERSION}-${TARGET}.zip
           fi
 
-          tar -czf dist/$BIN-$TARGET.tar.gz -C dist .
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: koshelf-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.zip
 
-          shasum -a 256 dist/$BIN-$TARGET.tar.gz > dist/$BIN-$TARGET.tar.gz.sha256
+  release:
+    name: Create GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
 
-      - name: Create Release (draft)
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Generate SHA256 checksums
+        run: |
+          cd artifacts
+          find . -type f \( -name "*.tar.gz" -o -name "*.zip" \) -exec sha256sum {} \; > SHA256SUMS
+
+      - name: Create Release (Draft)
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: dist/*
+          files: |
+            artifacts/**/*.tar.gz
+            artifacts/**/*.zip
+            artifacts/SHA256SUMS
