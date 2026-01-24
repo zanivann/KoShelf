@@ -7,8 +7,6 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  KOSHELF_SKIP_NODE_BUILD: "1"
-  KOSHELF_SKIP_NPM_INSTALL: "1"
 
 jobs:
 # =========================
@@ -19,19 +17,33 @@ jobs:
     runs-on: ubuntu-latest
 
     strategy:
+      fail-fast: false
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            name: koshelf-linux-gnu-x86_64.tar.gz
+            archive: koshelf-linux-gnu-x86_64.tar.gz
+
           - target: x86_64-unknown-linux-musl
-            name: koshelf-linux-musl-x86_64.tar.gz
+            archive: koshelf-linux-musl-x86_64.tar.gz
+
           - target: aarch64-unknown-linux-gnu
-            name: koshelf-linux-gnu-aarch64.tar.gz
+            archive: koshelf-linux-gnu-aarch64.tar.gz
+
           - target: aarch64-unknown-linux-musl
-            name: koshelf-linux-musl-aarch64.tar.gz
+            archive: koshelf-linux-musl-aarch64.tar.gz
 
     steps:
       - uses: actions/checkout@v4
+
+      # ---- Node / Assets (OBRIGATÓRIO)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build-css-prod
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -43,25 +55,25 @@ jobs:
           sudo apt-get install -y \
             build-essential \
             musl-tools \
-            gcc-aarch64-linux-gnu \
-            g++-aarch64-linux-gnu
+            gcc-aarch64-linux-gnu
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
         env:
           CC_x86_64_unknown_linux_musl: musl-gcc
           CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
-          RUSTFLAGS: ${{ contains(matrix.target, 'musl') && '-C link-arg=-static-libgcc' || '' }}
+          KOSHELF_SKIP_NODE_BUILD: "1"
+          KOSHELF_SKIP_NPM_INSTALL: "1"
 
       - name: Empacotar
         run: |
           cd target/${{ matrix.target }}/release
-          tar -czf ../../../${{ matrix.name }} koshelf
+          tar -czf ../../../${{ matrix.archive }} koshelf
 
       - name: Upload Release
         uses: softprops/action-gh-release@v1
         with:
-          files: ${{ matrix.name }}
+          files: ${{ matrix.archive }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -75,12 +87,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build-css-prod
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: x86_64-pc-windows-gnu
 
       - name: Build
         run: cargo build --release --target x86_64-pc-windows-gnu
+        env:
+          KOSHELF_SKIP_NODE_BUILD: "1"
+          KOSHELF_SKIP_NPM_INSTALL: "1"
 
       - name: Empacotar
         run: |
@@ -95,7 +119,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 # =========================
-# MACOS (Intel + ARM + Universal)
+# MACOS
 # =========================
   macos:
     name: macOS (Intel, ARM, Universal)
@@ -103,6 +127,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build frontend assets
+        run: |
+          npm ci
+          npm run build-css-prod
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -112,9 +145,15 @@ jobs:
 
       - name: Build Intel
         run: cargo build --release --target x86_64-apple-darwin
+        env:
+          KOSHELF_SKIP_NODE_BUILD: "1"
+          KOSHELF_SKIP_NPM_INSTALL: "1"
 
       - name: Build Apple Silicon
         run: cargo build --release --target aarch64-apple-darwin
+        env:
+          KOSHELF_SKIP_NODE_BUILD: "1"
+          KOSHELF_SKIP_NPM_INSTALL: "1"
 
       - name: Criar Universal
         run: |
