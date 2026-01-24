@@ -49,10 +49,10 @@ impl WebServer {
     }
 
     async fn get_stats_handler(library: web::Data<Arc<Vec<LibraryItem>>>) -> impl Responder {
-        let mut lidos = 0;
-        let mut em_leitura = 0;
-        let mut pausados = 0;
-        let mut nao_lidos = 0;
+        let mut read = 0;
+        let mut reading = 0;
+        let mut paused = 0;
+        let mut unread = 0;
 
         for item in library.iter() {
             // Pegamos o progresso do metadado
@@ -64,22 +64,22 @@ impl WebServer {
             let status_debug = format!("{:?}", item.koreader_metadata).to_lowercase();
 
             if status_debug.contains("abandoned") {
-                pausados += 1;
+                paused += 1;
             } else if percent >= 1.0 {
-                lidos += 1;
+                read += 1;
             } else if percent > 0.0 {
-                em_leitura += 1;
+                reading += 1;
             } else {
-                nao_lidos += 1;
+                unread += 1;
             }
         }
 
         HttpResponse::Ok().json(serde_json::json!({
             "total": library.len(),
-            "lidos": lidos,
-            "em_leitura": em_leitura,
-            "nao_lidos": nao_lidos,
-            "pausados": pausados
+            "read": read,
+            "reading": reading,
+            "unread": unread,
+            "paused": paused
         }))
     }
 

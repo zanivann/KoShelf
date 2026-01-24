@@ -1,16 +1,19 @@
-<div align="center">
+<p align="center">
+  <a href="README.md">English</a> |
+  <a href="README.pt-BR.md">Português</a>
+</p>
 
 # KoShelf
 
 <p>
-  <a href="https://github.com/paviro/koshelf/stargazers">
-    <img src="https://img.shields.io/github/stars/paviro/koshelf?style=social" alt="Stars" />
+  <a href="https://github.com/zanivann/koshelf/stargazers">
+    <img src="https://img.shields.io/github/stars/zanivann/koshelf?style=social" alt="Stars" />
   </a>
-  <a href="https://github.com/paviro/koshelf/releases/latest">
-    <img src="https://img.shields.io/github/v/release/paviro/koshelf?label=release" alt="Latest Release" />
+  <a href="https://github.com/zanivann/zanivann/releases/latest">
+    <img src="https://img.shields.io/github/v/release/zanivann/koshelf?label=release" alt="Latest Release" />
   </a>
-  <a href="https://github.com/paviro/koshelf/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/paviro/koshelf" alt="License" />
+  <a href="https://github.com/zanivann/koshelf/blob/main/LICENSE">
+    <img src="https://img.shields.io/github/license/zanivann/koshelf" alt="License" />
   </a>
 </p>
 
@@ -58,6 +61,7 @@
 - 🚀 **Static Site**: Generates a complete static website you can host anywhere
 - 🖥️ **Server Mode**: Built-in web server with live file watching for use with reverse proxy
 - 📱 **Responsive**: Optimized for desktop, tablet, and mobile with adaptive grid layouts
+- 🔌 **API**: REST API endpoint to fetch your library statistics
 
 ## Screenshots
 
@@ -71,12 +75,6 @@
 
 ## Installation
 
-### Home Assistant
-
-Using Home Assistant? Install KoShelf as an add-on with just one click below.
-
-[![Open your Home Assistant instance and show the dashboard of an add-on.](https://my.home-assistant.io/badges/supervisor_addon.svg)](https://my.home-assistant.io/redirect/supervisor_addon/?addon=5d189d71_koshelf&repository_url=https%3A%2F%2Fgithub.com%2Fpaviro%2Fhome-assistant-addons)
-
 ### Docker Compose Deployment
 Deploy KoShelf easily using the community-maintained Docker image.
 #### Quick Start
@@ -87,7 +85,7 @@ services:
   koshelf:
     image: ghcr.io/devtigro/koshelf:latest
     ports:
-     - "3000:3000"
+     - "3009:3009"
     volumes:
       - /path/to/your/books:/books:ro
       - /path/to/your/settings:/settings:ro
@@ -103,13 +101,64 @@ services:
 docker compose up -d
 ```
 
-4. Access KoShelf at http://localhost:3000
+4. Access KoShelf at http://localhost:3009
 
 Docker Image Repository: [koshelf-docker](https://github.com/DevTigro/koshelf-docker)
 
+### Installation (CasaOS)
+
+1. Open CasaOS > App Store > Custom Install.
+2. Click the Import icon (top right).
+3. Paste the following YAML configuration:
+```yaml
+name: koshelf-zanivann
+services:
+  koshelf:
+    container_name: koshelf-zanivann
+    image: ghcr.io/zanivann/koshelf:latest
+    cpu_shares: 90
+    command:
+      - --library-path
+      - /books
+      - --statistics-db
+      - /settings/statistics.sqlite3
+      - --port
+      - "3009"
+      - --timezone
+      - America/Sao_Paulo
+      - --include-unread
+      - --language
+      - pt_BR
+    ports:
+      - target: 3009
+        published: "3009"
+        protocol: tcp
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: /DATA/AppData/koshelf-books
+        target: /books
+      - type: bind
+        source: /DATA/AppData/koshelf
+        target: /settings
+    x-casaos:
+      icon: [https://b.thumbs.redditmedia.com/Flac-ySmslzY0SE583PNA42rFbcYxLt7hqgCeUrC11s.png](https://b.thumbs.redditmedia.com/Flac-ySmslzY0SE583PNA42rFbcYxLt7hqgCeUrC11s.png)
+      title: KoShelf Personalizado
+    network_mode: bridge
+x-casaos:
+  author: zanivann
+  category: self
+  icon: [https://b.thumbs.redditmedia.com/Flac-ySmslzY0SE583PNA42rFbcYxLt7hqgCeUrC11s.png](https://b.thumbs.redditmedia.com/Flac-ySmslzY0SE583PNA42rFbcYxLt7hqgCeUrC11s.png)
+  index: /
+  port_map: "3009"
+  scheme: http
+  title:
+    custom: KoShelf Personalizado
+```
+
 ### Prebuilt Binaries
 
-The easiest way to get started is to download a prebuilt binary from the [releases page](https://github.com/paviro/koshelf/releases). Binaries are available for:
+The easiest way to get started is to download a prebuilt binary from the [releases page](https://github.com/zanivann/koshelf/releases). Binaries are available for:
 
 - Windows (x64)
 - macOS (Apple Silicon, Intel & Universal)
@@ -146,7 +195,7 @@ cd C:\Users\YourName\Downloads  # Windows
 # Run KoShelf with your books folder
 ./koshelf --library-path /path/to/your/library --output ./my-library-site
 ```
-
+```
 **Pro tip:** On most terminals, you can drag and drop the downloaded binary file directly into the terminal window. This will automatically insert the full file path, allowing you to immediately add your arguments and run the command.
 
 If you plan to use KoShelf frequently and use Linux or macOS, you can move the binary to `/usr/local/bin/` to make it available system-wide. This allows you to run `koshelf` from anywhere without specifying the full path:
@@ -171,7 +220,7 @@ If you prefer to build from source or need a custom build:
 #### Building the tool
 
 ```bash
-git clone https://github.com/paviro/KoShelf
+git clone https://github.com/zanivann/KoShelf
 cd KoShelf
 
 # Build the Rust binary
@@ -217,7 +266,7 @@ KoShelf can operate in several modes:
   > **Note:** If both `--min-pages-per-day` and `--min-time-per-day` are provided, a book's data for a day is counted if **either** condition is met for that book on that day. These filters apply **per book per day**, meaning each book must individually meet the threshold for each day to be included in statistics.
 - `--include-all-stats`: By default, statistics are filtered to only include books present in your `--books-path` directory. This prevents deleted books or external files (like Wallabag articles) from skewing your recap and statistics. Use this flag to include statistics for all books in the database, regardless of whether they exist in your library.
 - `-l, --language`: Language for UI translations. Use full locale code (e.g., `en_US`, `de_DE`, `pt_BR`) for correct date formatting. Default: `en_US`
-- `--list-languages`: List all supported languages and exit
+- `--list-languages`: List all supported languages and exit To see all supported languages: ./koshelf --list-languages
 - `--github`: Print GitHub repository URL
 
 ### Example
@@ -257,6 +306,8 @@ KoShelf can operate in several modes:
 ./koshelf -i ~/Library -o ~/my-reading-site --language de_DE
 ```
 
+
+
 ## KoReader Setup
 
 ### Metadata Storage Options
@@ -294,9 +345,6 @@ KOReaderSettings/
         └── a3b2c1d4e5f6...sdr/
             └── metadata.epub.lua
 ```
-
-
-
 
 **Usage:**
 ```bash
@@ -340,7 +388,7 @@ My actual setup:
 # My server command - runs continuously with file watching and statistics
 ./koshelf --library-path ~/syncthing/Books \
          --statistics-db ~/syncthing/KOReaderSettings/statistics.sqlite3 \
-         --port 3000
+         --port 3009
 ```
 
 This way, every time Syncthing pulls updates from my e-reader, the website automatically updates with my latest reading progress, new highlights, and updated statistics.
@@ -511,11 +559,22 @@ site/
 
 ## Credits
 
-Design and feature inspiration taken from [KoInsight](https://github.com/GeorgeSG/KoInsight) - an excellent alternative that focuses more on statistics and also supports acting as a KOReader sync server. If you're primarily interested in reading stats rather than highlights and annotations, definitely check it out!
+his project is a fork of the original paviro/KoShelf.
+Special thanks to:
 
-The calendar feature is powered by [EventCalendar](https://github.com/vkurko/calendar) - a lightweight, full-featured JavaScript event calendar library.
 
-Styled with [Tailwind CSS](https://tailwindcss.com/) for modern, responsive design.
+
+EventCalendar 
+
+This project is a fork of the original [paviro/KoShelf](https://www.google.com/search?q=https://github.com/paviro/KoShelf).
+
+Special thanks to:
+
+[KoInsight](https://github.com/GeorgeSG/KoInsight) - for design inspiration.
+
+[EventCalendar](https://github.com/vkurko/calendar) - for the calendar engine.
+
+[Tailwind CSS](https://tailwindcss.com/) for the UI framework.
 
 ## Disclaimer
 
