@@ -2,7 +2,7 @@
 FROM rustlang/rust:nightly-slim AS builder
 WORKDIR /app
 
-# Instala dependências de sistema e Node.js
+# Instala dependências de sistema e Node.js 20 (necessário para o CSS/JS)
 RUN apt-get update && apt-get install -y \
     pkg-config libssl-dev libsqlite3-dev build-essential git curl \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
@@ -11,15 +11,11 @@ RUN apt-get update && apt-get install -y \
 
 COPY . .
 
-# Criamos as variáveis para enganar a trava do build.rs
-ENV KOSHELF_SKIP_NPM_INSTALL=1
-ENV KOSHELF_SKIP_NODE_BUILD=1
+# 1. Instalamos as dependências do Node primeiro
+RUN npm install
 
-# Instalamos as dependências apenas para a pasta node_modules existir
-# O '--no-scripts' evita que ele tente rodar builds automáticos que falham
-RUN npm install --no-scripts
-
-# Compila o binário Rust (agora o build.rs verá que node_modules existe)
+# 2. Agora o cargo build vai conseguir rodar o build.rs 
+# que gera automaticamente o compiled_style.css e os .js
 RUN cargo build --release
 
 # Estágio Final
@@ -31,9 +27,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/koshelf /usr/local/bin/koshelf
-
-# Garante que a pasta dist exista (mesmo que vazia ou vinda do seu repo)
-RUN mkdir -p dist
+# O KoShelf precisa da pasta dist para servir imagens/icones
 COPY --from=builder /app/dist ./dist 
 
 EXPOSE 3009
