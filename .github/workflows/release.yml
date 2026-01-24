@@ -27,13 +27,9 @@ jobs:
             target: x86_64-unknown-linux-musl
             archive: tar.gz
 
-          # Linux ARM64
+          # Linux ARM64 (GNU only)
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
-            archive: tar.gz
-
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-musl
             archive: tar.gz
 
           # Windows (MSVC)
@@ -59,27 +55,20 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # ---------- MUSL FIX (SOLUÇÃO 2) ----------
-      - name: Install musl toolchain
-        if: contains(matrix.target, 'musl')
+      # ---------- Linux toolchains ----------
+      - name: Install Linux toolchains
+        if: matrix.os == 'ubuntu-latest'
         run: |
           sudo apt-get update
-          sudo apt-get install -y musl-tools
 
           if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
-            sudo ln -sf /usr/bin/musl-gcc /usr/bin/x86_64-unknown-linux-musl-gcc
+            sudo apt-get install -y musl-tools
           fi
 
-          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-musl" ]]; then
+          if [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu
-            sudo ln -sf /usr/bin/aarch64-linux-gnu-gcc /usr/bin/aarch64-unknown-linux-musl-gcc
           fi
-
-      - name: Configure musl environment
-        if: contains(matrix.target, 'musl')
-        run: |
-          echo "CC=musl-gcc" >> $GITHUB_ENV
-      # ------------------------------------------
+      # -------------------------------------
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
@@ -106,7 +95,6 @@ jobs:
             tar czf "$ARCHIVE" "$BIN"
           fi
 
-          # SHA256 multiplataforma
           if command -v sha256sum >/dev/null 2>&1; then
             sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
           else
