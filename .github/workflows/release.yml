@@ -3,7 +3,7 @@ name: Release Multi-Plataforma
 on:
   push:
     tags:
-      - 'v*' # Dispara sempre que criar uma tag (ex: v2.0.2)
+      - 'v*' # Dispara sempre que criar uma tag (ex: v2.0.4)
 
 jobs:
   release:
