@@ -41,21 +41,20 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          # Instalamos os compiladores básicos e ferramentas musl
           sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu g++-aarch64-linux-gnu build-essential
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
         env:
-          # Configurações para x86_64 MUSL
-          # Usamos o musl-gcc que vem no pacote musl-tools
+          # Linkers de C
           CC_x86_64_unknown_linux_musl: musl-gcc
-          # Para C++ no x86_64 musl, tentamos o g++ padrão (muitos pacotes funcionam assim se o musl-tools estiver instalado)
-          CXX_x86_64_unknown_linux_musl: g++
-          
-          # Configurações para ARM64 MUSL
           CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
+          # Linkers de C++
+          CXX_x86_64_unknown_linux_musl: g++
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
+          # RESOLUÇÃO DO ERRO LUAJIT:
+          # Forçamos o linker a não usar a libgcc_eh da glibc que causa conflito no musl
+          RUSTFLAGS: "-C link-arg=-lgcc"
 
       - name: Empacotar (Unix)
         if: matrix.os != 'windows-latest'
