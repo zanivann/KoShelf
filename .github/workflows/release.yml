@@ -5,126 +5,109 @@ on:
     tags:
       - "v*"
 
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build (${{ matrix.target }})
     runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux (Usa Cross para gerenciar dependências nativas automaticamente)
+          # Linux x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             archive: tar.gz
+
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             archive: tar.gz
+
+          # Linux ARM64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-gnu
             archive: tar.gz
+
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             archive: tar.gz
 
-          # macOS (Nativo)
+          # Windows
+          - os: windows-latest
+            target: x86_64-pc-windows-gnu
+            archive: zip
+
+          # macOS Intel
           - os: macos-latest
             target: x86_64-apple-darwin
             archive: tar.gz
+
+          # macOS Apple Silicon
           - os: macos-latest
             target: aarch64-apple-darwin
             archive: tar.gz
 
-          # Windows (Nativo)
-          - os: windows-latest
-            target: x86_64-pc-windows-msvc
-            archive: zip
-
     steps:
       - uses: actions/checkout@v4
 
-      # Configura Node.js para o build.rs processar Tailwind/TS
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install npm dependencies
-        run: npm install
-
-      - name: Instalar Rust
+      - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
 
-      - name: Install cross (Linux only)
-        if: runner.os == 'Linux'
-        run: cargo install cross --locked
+      - name: Install musl tools (Linux)
+        if: contains(matrix.target, 'musl')
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
 
       - name: Build
-        shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "Linux" ]; then
-            # Cross usa containers Docker que já possuem os compiladores C++ corretos
-            cross build --release --target ${{ matrix.target }}
-          else
-            cargo build --release --target ${{ matrix.target }}
-          fi
-        env:
-          # Garante que o build.rs saiba que estamos em um ambiente de CI
-          KOSHELF_SKIP_FONT_DOWNLOAD: "true" 
+        run: cargo build --release --target ${{ matrix.target }}
 
       - name: Package
         shell: bash
         run: |
-          BIN=koshelf
-          EXT=""
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            EXT=".exe"
+          VERSION=${GITHUB_REF_NAME}
+          BIN_NAME=koshelf
+          OUT=release
+          mkdir -p $OUT
+
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            BIN_NAME=koshelf.exe
           fi
 
-          mkdir -p dist
-          cp target/${{ matrix.target }}/release/$BIN$EXT dist/
+          cp target/${{ matrix.target }}/release/$BIN_NAME .
 
-          if [ "${{ matrix.archive }}" = "tar.gz" ]; then
-            tar -czf koshelf-${{ matrix.target }}.tar.gz -C dist .
+          ARCHIVE_NAME=koshelf-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}
+
+          if [[ "${{ matrix.archive }}" == "zip" ]]; then
+            zip $ARCHIVE_NAME $BIN_NAME
           else
-            cd dist && zip ../koshelf-${{ matrix.target }}.zip *
+            tar czf $ARCHIVE_NAME $BIN_NAME
           fi
 
-      - name: SHA256
-        shell: bash
-        run: |
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            certutil -hashfile koshelf-${{ matrix.target }}.zip SHA256 >> SHA256SUMS
-          else
-            shasum -a 256 koshelf-${{ matrix.target }}.* >> SHA256SUMS
-          fi
+          sha256sum $ARCHIVE_NAME >> SHA256SUMS.txt
+
+          mv $ARCHIVE_NAME SHA256SUMS.txt $OUT/
 
       - uses: actions/upload-artifact@v4
         with:
-          name: artifacts-${{ matrix.target }}
-          path: |
-            *.tar.gz
-            *.zip
-            SHA256SUMS
+          name: ${{ matrix.target }}
+          path: release/*
 
-  release:
-    name: Publish Draft Release
+
+release:
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
 
-      - name: Publish draft
+      - name: Create GitHub Release (draft)
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: |
-            **/*.tar.gz
-            **/*.zip
-            **/SHA256SUMS
+          files: artifacts/**/*
