@@ -1,8 +1,8 @@
 # Estágio de Build
-FROM rust:1.75-slim as builder
+FROM rust:1.84-slim AS builder
 WORKDIR /app
 
-# Instalando dependências de sistema fundamentais
+# Instalando dependências de sistema para SQLite e SSL
 RUN apt-get update && apt-get install -y \
     pkg-config \
     libssl-dev \
@@ -13,14 +13,14 @@ RUN apt-get update && apt-get install -y \
 
 COPY . .
 
-# Compilação otimizada
+# Compilação em modo Release
 RUN cargo build --release
 
 # Estágio Final
 FROM debian:bookworm-slim
 WORKDIR /app
 
-# Instalando dependências de execução
+# Dependências de runtime
 RUN apt-get update && apt-get install -y \
     libssl3 \
     libsqlite3-0 \
@@ -28,7 +28,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/target/release/koshelf /usr/local/bin/koshelf
-# Copia o frontend compilado
+# O KoShelf geralmente precisa da pasta dist para o frontend
 COPY --from=builder /app/dist ./dist 
 
 EXPOSE 3009
