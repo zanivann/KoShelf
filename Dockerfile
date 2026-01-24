@@ -2,17 +2,24 @@
 FROM rustlang/rust:nightly-slim AS builder
 WORKDIR /app
 
-# Instala apenas dependências de sistema essenciais
+# Instala dependências de sistema e Node.js
 RUN apt-get update && apt-get install -y \
-    pkg-config libssl-dev libsqlite3-dev build-essential git \
+    pkg-config libssl-dev libsqlite3-dev build-essential git curl \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 COPY . .
 
-# Variável de ambiente para o KoShelf não tentar rodar o NPM
+# Criamos as variáveis para enganar a trava do build.rs
 ENV KOSHELF_SKIP_NPM_INSTALL=1
+ENV KOSHELF_SKIP_NODE_BUILD=1
 
-# Compila o binário Rust com as suas correções no web.rs
+# Instalamos as dependências apenas para a pasta node_modules existir
+# O '--no-scripts' evita que ele tente rodar builds automáticos que falham
+RUN npm install --no-scripts
+
+# Compila o binário Rust (agora o build.rs verá que node_modules existe)
 RUN cargo build --release
 
 # Estágio Final
@@ -25,8 +32,7 @@ RUN apt-get update && apt-get install -y \
 
 COPY --from=builder /app/target/release/koshelf /usr/local/bin/koshelf
 
-# Copia a pasta dist existente no seu repositório
-# Certifique-se que ela está no seu GitHub. Se não estiver, use 'mkdir dist' para não dar erro
+# Garante que a pasta dist exista (mesmo que vazia ou vinda do seu repo)
 RUN mkdir -p dist
 COPY --from=builder /app/dist ./dist 
 
