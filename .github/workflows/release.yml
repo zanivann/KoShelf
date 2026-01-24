@@ -3,7 +3,7 @@ name: Release Multi-Plataforma
 on:
   push:
     tags:
-      - 'v*' # Dispara ao criar tags como v1.8.3
+      - 'v*'
 
 jobs:
   release:
@@ -41,17 +41,20 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          # Instala musl-tools (C), g++-musl (C++) e o compilador ARM
-          sudo apt-get install -y musl-tools g++-x86-64-linux-musl gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          # Instalamos os compiladores básicos e ferramentas musl
+          sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu g++-aarch64-linux-gnu build-essential
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
         env:
-          # Linkers de C (GCC)
+          # Configurações para x86_64 MUSL
+          # Usamos o musl-gcc que vem no pacote musl-tools
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          # Para C++ no x86_64 musl, tentamos o g++ padrão (muitos pacotes funcionam assim se o musl-tools estiver instalado)
+          CXX_x86_64_unknown_linux_musl: g++
+          
+          # Configurações para ARM64 MUSL
           CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
-          CC_x86_64_unknown_linux_musl: x86_64-linux-musl-gcc
-          # Linkers de C++ (G++) - Necessário para unrar_sys
-          CXX_x86_64_unknown_linux_musl: x86_64-linux-musl-g++
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
 
       - name: Empacotar (Unix)
