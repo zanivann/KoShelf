@@ -7,6 +7,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  BIN_NAME: koshelf
 
 jobs:
   build:
@@ -35,9 +36,9 @@ jobs:
             target: aarch64-unknown-linux-musl
             archive: tar.gz
 
-          # Windows
+          # Windows (MSVC – mais confiável)
           - os: windows-latest
-            target: x86_64-pc-windows-gnu
+            target: x86_64-pc-windows-msvc
             archive: zip
 
           # macOS Intel
@@ -68,46 +69,51 @@ jobs:
       - name: Package
         shell: bash
         run: |
-          VERSION=${GITHUB_REF_NAME}
-          BIN_NAME=koshelf
-          OUT=release
-          mkdir -p $OUT
+          VERSION="${GITHUB_REF_NAME}"
+          OUT="release"
+          mkdir -p "$OUT"
 
+          BIN="${BIN_NAME}"
           if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
-            BIN_NAME=koshelf.exe
+            BIN="${BIN_NAME}.exe"
           fi
 
-          cp target/${{ matrix.target }}/release/$BIN_NAME .
+          cp "target/${{ matrix.target }}/release/$BIN" .
 
-          ARCHIVE_NAME=koshelf-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}
+          ARCHIVE="koshelf-${VERSION}-${{ matrix.target }}.${{ matrix.archive }}"
 
           if [[ "${{ matrix.archive }}" == "zip" ]]; then
-            zip $ARCHIVE_NAME $BIN_NAME
+            zip "$ARCHIVE" "$BIN"
           else
-            tar czf $ARCHIVE_NAME $BIN_NAME
+            tar czf "$ARCHIVE" "$BIN"
           fi
 
-          sha256sum $ARCHIVE_NAME >> SHA256SUMS.txt
+          # SHA256 multiplataforma
+          if command -v sha256sum >/dev/null 2>&1; then
+            sha256sum "$ARCHIVE" > "$ARCHIVE.sha256"
+          else
+            shasum -a 256 "$ARCHIVE" > "$ARCHIVE.sha256"
+          fi
 
-          mv $ARCHIVE_NAME SHA256SUMS.txt $OUT/
+          mv "$ARCHIVE" "$ARCHIVE.sha256" "$OUT/"
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target }}
           path: release/*
 
-
-release:
+  release:
+    name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/download-artifact@v4
         with:
-          path: artifacts
+          path: dist
 
       - name: Create GitHub Release (draft)
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: artifacts/**/*
+          files: dist/**/*
