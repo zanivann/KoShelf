@@ -1,6 +1,6 @@
 [package]
 name = "koshelf"
-version = "2.0.17"
+version = "2.0.18"
 description = "Transform your KOReader library into a beautiful reading dashboard with statistics."
 repository = "https://github.com/paviro/KOShelf"
 license = "EUPL-1.2 license"
@@ -47,7 +47,7 @@ image = { version = "0.25.6", default-features = false, features = [
 webp = "0.3.1"
 
 # Lua parsing (CI-safe: Lua 5.4, NÃO LuaJIT)
-mlua = { version = "0.11.5", features = ["lua54"] }
+mlua = { version = "0.11.5", features = ["lua54", "vendored"] }
 
 # Serialization
 serde = { version = "1.0.219", features = ["derive"] }
