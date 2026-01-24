@@ -52,9 +52,9 @@ jobs:
           # Linkers de C++
           CXX_x86_64_unknown_linux_musl: g++
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
-          # RESOLUÇÃO DO ERRO LUAJIT:
-          # Forçamos o linker a não usar a libgcc_eh da glibc que causa conflito no musl
-          RUSTFLAGS: "-C link-arg=-lgcc"
+          # APLICAÇÃO CIRÚRGICA DA FLAG (Apenas para Musl Linux)
+          # Isso evita o erro 'gcc not found' no macOS
+          RUSTFLAGS: ${{ contains(matrix.target, 'linux-musl') && '-C link-arg=-lgcc' || '' }}
 
       - name: Empacotar (Unix)
         if: matrix.os != 'windows-latest'
