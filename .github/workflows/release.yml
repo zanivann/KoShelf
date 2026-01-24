@@ -46,15 +46,20 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
         env:
-          # Linkers de C
+          # Linkers de C principais
           CC_x86_64_unknown_linux_musl: musl-gcc
           CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
           # Linkers de C++
           CXX_x86_64_unknown_linux_musl: g++
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
-          # APLICAÇÃO CIRÚRGICA DA FLAG (Apenas para Musl Linux)
-          # Isso evita o erro 'gcc not found' no macOS
-          RUSTFLAGS: ${{ contains(matrix.target, 'linux-musl') && '-C link-arg=-lgcc' || '' }}
+          
+          # RESOLUÇÃO PARA LUAJIT / MLUA:
+          # Forçamos o build do LuaJIT a usar o musl-gcc como compilador e linker de destino
+          TARGET_CC: ${{ matrix.target == 'x86_64-unknown-linux-musl' && 'musl-gcc' || (matrix.target == 'aarch64-unknown-linux-musl' && 'aarch64-linux-gnu-gcc' || '') }}
+          TARGET_LD: ${{ matrix.target == 'x86_64-unknown-linux-musl' && 'musl-gcc' || (matrix.target == 'aarch64-unknown-linux-musl' && 'aarch64-linux-gnu-gcc' || '') }}
+          
+          # Flags para evitar o conflito com libgcc_eh e _dl_find_object
+          RUSTFLAGS: ${{ contains(matrix.target, 'linux-musl') && '-C link-arg=-lgcc -C link-arg=-static-libgcc' || '' }}
 
       - name: Empacotar (Unix)
         if: matrix.os != 'windows-latest'
