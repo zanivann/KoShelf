@@ -48,15 +48,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. SETUP NODE.JS
+      # 1. SETUP NODE.JS & BUILD FRONTEND
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install NPM Dependencies
-        run: npm install
+      - name: Build Frontend Assets
+        shell: bash
+        run: |
+          npm install
+          # Gera o CSS e TS antecipadamente usando o shell (que sabe lidar com npm/npm.cmd)
+          npm run build 
 
       # 2. SETUP RUST
       - name: Install Rust
@@ -69,16 +73,20 @@ jobs:
         if: matrix.use_cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
-      # 4. BUILD
+      # 4. BUILD BINARY
       - name: Build Binary
         shell: bash
         run: |
+          # Define as variáveis GLOBALMENTE para pular o npm dentro do build.rs
+          # Isso corrige o erro no Windows e no Cross, pois os assets já foram gerados acima
+          export KOSHELF_SKIP_NODE_BUILD=true
+          export KOSHELF_SKIP_NPM_INSTALL=true
+
           if [ "${{ matrix.use_cross }}" == "true" ]; then
             cross build --release --target ${{ matrix.target }}
           else
             cargo build --release --target ${{ matrix.target }}
           fi
-        # REMOVIDO: KOSHELF_SKIP_FONT_DOWNLOAD para permitir que o build.rs baixe as fontes necessárias
 
       # 5. EMPACOTAR
       - name: Archive Binary
