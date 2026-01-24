@@ -30,7 +30,7 @@ jobs:
             name: koshelf-macos-arm64.tar.gz
 
     steps:
-      - uses: action/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Instalar Rust
         uses: dtolnay/rust-toolchain@stable
