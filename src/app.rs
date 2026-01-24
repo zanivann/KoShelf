@@ -21,6 +21,7 @@ struct OutputPlan {
     mode: RunMode,
 }
 
+
 fn plan_output(cli: &Cli) -> Result<OutputPlan> {
     match (&cli.output, cli.watch) {
         (Some(dir), false) => Ok(OutputPlan {
