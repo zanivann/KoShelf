@@ -1,8 +1,8 @@
 [package]
 name = "koshelf"
-version = "2.0.54"
+version = "1.5.1"
 description = "Transform your KOReader library into a beautiful reading dashboard with statistics."
-repository = "https://github.com/paviro/KOShelf"
+repository = "https://github.com/zanivann/KOShelf"
 license = "EUPL-1.2 license"
 authors = ["Paul-Vincent Roll"]
 edition = "2024"
@@ -86,6 +86,8 @@ intl-memoizer = "0.5"
 actix-web = "4.12.1"
 actix-files = "0.6.9"
 actix-cors = "0.7.1"
+# HTTP Client (Adicionado para corrigir o erro de compilação)
+ureq = { version = "3.1.4", features = ["json"] }
 
 [target.'cfg(not(windows))'.dependencies]
 # CBR/RAR archive extraction (not supported on Windows)
@@ -95,7 +97,6 @@ unrar = "0.5"
 ureq = "3.1.4"
 
 [dev-dependencies]
-ureq = { version = "3.1.4", features = ["json"] }
 rayon = "1.11.0"
 fluent-syntax = "0.11"
 

@@ -1,366 +1,115 @@
-# Multi-target build tasks for koshelf
+# Makefile.toml Blindado
 
 [config]
 default_to_workspace = false
-main_project_member = "."
+skip_core_tasks = true
 
-# Default environment variables
-[env]
-CARGO_BUILD_PROFILE = "release"
+# --- 1. FRONTEND (Executa nativamente no Mac) ---
 
-# Production profile environment
-[env.production]
-CARGO_BUILD_PROFILE = "release"
+[tasks.npm-install]
+description = "Instala dependências do Node.js"
+command = "npm"
+args = ["install"]
 
-# ARM64 targets
-[tasks.build-arm64-musl]
-description = "Build for ARM64 with musl"
-command = "cargo"
-args = ["build", "--release", "--target", "aarch64-unknown-linux-musl"]
+[tasks.build-assets]
+description = "Gera CSS e JS usando o script do package.json"
+dependencies = ["npm-install"]
+command = "npm"
+args = ["run", "build"]
 
-[tasks.build-arm64-gnu]
-description = "Build for ARM64 with glibc"
-command = "cargo"
-args = ["build", "--release", "--target", "aarch64-unknown-linux-gnu"]
+# --- 2. BACKEND (Rust via Cross/Cargo com ENV explícito) ---
 
-# x86_64 Linux targets
-[tasks.build-x86-gnu]
-description = "Build for x86_64 Linux with glibc"
-command = "cargo"
-args = ["build", "--release", "--target", "x86_64-unknown-linux-gnu"]
-
-[tasks.build-x86-musl]
-description = "Build for x86_64 Linux with musl"
-command = "cargo"
-args = ["build", "--release", "--target", "x86_64-unknown-linux-musl"]
-
-# Windows targets
-[tasks.build-windows-gnu]
-description = "Build for Windows x86_64 (MinGW)"
-command = "cargo"
-args = ["build", "--release", "--target", "x86_64-pc-windows-gnu"]
-
-# macOS targets
-[tasks.build-macos-intel]
-description = "Build for Intel macOS"
-command = "cargo"
-args = ["build", "--release", "--target", "x86_64-apple-darwin"]
-
-[tasks.build-macos-silicon]
-description = "Build for Apple Silicon macOS"
-command = "cargo"
-args = ["build", "--release", "--target", "aarch64-apple-darwin"]
-
-[tasks.build-macos-universal]
-description = "Build universal macOS binary (Intel + Apple Silicon)"
-dependencies = ["build-macos-intel", "build-macos-silicon"]
-script = '''
-mkdir -p target/universal-apple-darwin/release
-lipo -create \
-    target/x86_64-apple-darwin/release/koshelf \
-    target/aarch64-apple-darwin/release/koshelf \
-    -output target/universal-apple-darwin/release/koshelf
-'''
-
-# Combined build tasks
-[tasks.build-all]
-description = "Build for all supported platforms"
-dependencies = [
-    "build-arm64-musl",
-    "build-arm64-gnu",
-    "build-x86-gnu",
-    "build-x86-musl",
-    "build-windows-gnu",
-    "build-macos-intel",
-    "build-macos-silicon",
-    "build-macos-universal"
+# Linux ARM64
+[tasks.build-linux-arm64]
+description = "Compila para Linux ARM64 usando Docker (Cross)"
+dependencies = ["build-assets"]
+command = "cross"
+# AQUI ESTÁ O SEGREDO: Injetamos as variáveis via ENV no comando
+args = [
+    "build", 
+    "--release", 
+    "--target", "aarch64-unknown-linux-gnu"
 ]
+# Forçamos as variáveis aqui também para garantir
+env = { "KOSHELF_SKIP_NODE_BUILD" = "true", "KOSHELF_SKIP_NPM_INSTALL" = "true" }
 
-[tasks.build-arm64-all]
-description = "Build for both ARM64 targets"
-dependencies = [
-    "build-arm64-musl", 
-    "build-arm64-gnu"
+# Linux x86_64
+[tasks.build-linux-x64]
+description = "Compila para Linux Intel/AMD64 usando Docker (Cross)"
+dependencies = ["build-assets"]
+command = "cross"
+args = [
+    "build", 
+    "--release", 
+    "--target", "x86_64-unknown-linux-gnu"
 ]
+env = { "KOSHELF_SKIP_NODE_BUILD" = "true", "KOSHELF_SKIP_NPM_INSTALL" = "true" }
 
-[tasks.build-linux-all]
-description = "Build for all Linux targets"
-dependencies = [
-    "build-arm64-musl",
-    "build-arm64-gnu",
-    "build-x86-gnu",
-    "build-x86-musl"
+# Windows x86_64
+[tasks.build-windows]
+description = "Compila para Windows usando Docker (Cross)"
+dependencies = ["build-assets"]
+command = "cross"
+args = [
+    "build", 
+    "--release", 
+    "--target", "x86_64-pc-windows-gnu"
 ]
+env = { "KOSHELF_SKIP_NODE_BUILD" = "true", "KOSHELF_SKIP_NPM_INSTALL" = "true" }
 
-[tasks.build-windows-all]
-description = "Build for all Windows targets"
-dependencies = [
-    "build-windows-gnu"
-]
-
-[tasks.build-macos-all]
-description = "Build for all macOS targets"
-dependencies = [
-    "build-macos-intel",
-    "build-macos-silicon", 
-    "build-macos-universal"
-]
-
-[tasks.run-tests]
-description = "Execute the full test suite before building releases"
+# macOS ARM64 (Nativo)
+[tasks.build-mac]
+description = "Compila para macOS (Apple Silicon) nativamente"
+dependencies = ["build-assets"]
 command = "cargo"
-args = ["test"]
+args = ["build", "--release"]
+# No Mac não precisamos pular, mas ajuda a ser mais rápido se já rodou antes
+env = { "KOSHELF_SKIP_NODE_BUILD" = "true", "KOSHELF_SKIP_NPM_INSTALL" = "true" }
 
-[tasks.clean-all]
-description = "Clean all build artifacts"
-command = "cargo"
-args = ["clean"]
+# --- 3. EMPACOTAMENTO ---
 
-# Packaging tasks
 [tasks.create-release-dir]
-description = "Create release directory"
+script = ["mkdir -p release"]
+
+[tasks.pack-linux-arm64]
+dependencies = ["create-release-dir", "build-linux-arm64"]
 script = '''
-mkdir -p release
+cp target/aarch64-unknown-linux-gnu/release/koshelf release/koshelf-linux-arm64
+tar -czf release/koshelf-linux-arm64.tar.gz -C release koshelf-linux-arm64
+rm release/koshelf-linux-arm64
 '''
 
-
-[tasks.package-arm64-musl]
-description = "Package ARM64 musl binary"
-dependencies = ["create-release-dir"]
+[tasks.pack-linux-x64]
+dependencies = ["create-release-dir", "build-linux-x64"]
 script = '''
-BINARY_NAME="koshelf"
-TARGET="aarch64-unknown-linux-musl"
-PLATFORM="linux-musl-aarch64"
-cp "target/${TARGET}/release/${BINARY_NAME}" "release/"
-cd release
-zip "${PLATFORM}.zip" "${BINARY_NAME}"
-rm "${BINARY_NAME}"
+cp target/x86_64-unknown-linux-gnu/release/koshelf release/koshelf-linux-x64
+tar -czf release/koshelf-linux-x64.tar.gz -C release koshelf-linux-x64
+rm release/koshelf-linux-x64
 '''
 
-[tasks.package-arm64-gnu]
-description = "Package ARM64 gnu binary"
-dependencies = ["create-release-dir"]
+[tasks.pack-windows]
+dependencies = ["create-release-dir", "build-windows"]
 script = '''
-BINARY_NAME="koshelf"
-TARGET="aarch64-unknown-linux-gnu"
-PLATFORM="linux-gnu-aarch64"
-cp "target/${TARGET}/release/${BINARY_NAME}" "release/"
-cd release
-zip "${PLATFORM}.zip" "${BINARY_NAME}"
-rm "${BINARY_NAME}"
+cp target/x86_64-pc-windows-gnu/release/koshelf.exe release/koshelf-windows.exe
+zip -j release/koshelf-windows.zip release/koshelf-windows.exe || echo "Aviso: zip não instalado"
+rm release/koshelf-windows.exe
 '''
 
-[tasks.package-x86-gnu]
-description = "Package x86_64 gnu binary"
-dependencies = ["create-release-dir"]
+[tasks.pack-mac]
+dependencies = ["create-release-dir", "build-mac"]
 script = '''
-BINARY_NAME="koshelf"
-TARGET="x86_64-unknown-linux-gnu"
-PLATFORM="linux-gnu-x86_64"
-cp "target/${TARGET}/release/${BINARY_NAME}" "release/"
-cd release
-zip "${PLATFORM}.zip" "${BINARY_NAME}"
-rm "${BINARY_NAME}"
+cp target/release/koshelf release/koshelf-mac
+tar -czf release/koshelf-mac.tar.gz -C release koshelf-mac
+rm release/koshelf-mac
 '''
 
-[tasks.package-x86-musl]
-description = "Package x86_64 musl binary"
-dependencies = ["create-release-dir"]
-script = '''
-BINARY_NAME="koshelf"
-TARGET="x86_64-unknown-linux-musl"
-PLATFORM="linux-musl-x86_64"
-cp "target/${TARGET}/release/${BINARY_NAME}" "release/"
-cd release
-zip "${PLATFORM}.zip" "${BINARY_NAME}"
-rm "${BINARY_NAME}"
-'''
+# --- 4. TAREFA PRINCIPAL ---
 
-[tasks.package-windows-gnu]
-description = "Package Windows gnu binary"
-dependencies = ["create-release-dir"]
-script = '''
-BINARY_NAME="koshelf.exe"
-TARGET="x86_64-pc-windows-gnu"
-PLATFORM="windows-gnu-x86_64"
-cp "target/${TARGET}/release/${BINARY_NAME}" "release/"
-cd release
-zip "${PLATFORM}.zip" "${BINARY_NAME}"
-rm "${BINARY_NAME}"
-'''
-
-[tasks.package-macos-intel]
-description = "Package Intel macOS binary"
-dependencies = ["create-release-dir", "sign-macos-intel"]
-script = '''
-BINARY_NAME="koshelf"
-TARGET="x86_64-apple-darwin"
-PLATFORM="apple-darwin-x86_64"
-cp "target/${TARGET}/release/${BINARY_NAME}" "release/"
-cd release
-zip "${PLATFORM}.zip" "${BINARY_NAME}"
-rm "${BINARY_NAME}"
-'''
-
-[tasks.package-macos-silicon]
-description = "Package Apple Silicon macOS binary"
-dependencies = ["create-release-dir", "sign-macos-silicon"]
-script = '''
-BINARY_NAME="koshelf"
-TARGET="aarch64-apple-darwin"
-PLATFORM="apple-darwin-aarch64"
-cp "target/${TARGET}/release/${BINARY_NAME}" "release/"
-cd release
-zip "${PLATFORM}.zip" "${BINARY_NAME}"
-rm "${BINARY_NAME}"
-'''
-
-[tasks.package-macos-universal]
-description = "Package Universal macOS binary"
-dependencies = ["create-release-dir", "sign-macos-universal"]
-script = '''
-BINARY_NAME="koshelf"
-TARGET="universal-apple-darwin"
-PLATFORM="apple-darwin-universal"
-cp "target/${TARGET}/release/${BINARY_NAME}" "release/"
-cd release
-zip "${PLATFORM}.zip" "${BINARY_NAME}"
-rm "${BINARY_NAME}"
-'''
-
-# Combined packaging tasks
-[tasks.package-all]
-description = "Package all platform binaries into zip files"
-dependencies = [
-    "package-arm64-musl",
-    "package-arm64-gnu",
-    "package-x86-gnu", 
-    "package-x86-musl",
-    "package-windows-gnu",
-    "package-macos-intel",
-    "package-macos-silicon",
-    "package-macos-universal"
-]
-
-# Build and package in one go
 [tasks.release-all]
-description = "Build and package all platforms"
+description = "Gera releases para todas as plataformas na pasta release/"
 dependencies = [
-    "run-tests",
-    "build-all",
-    "package-all",
-    "notarize-macos-intel",
-    "notarize-macos-silicon",
-    "notarize-macos-universal"
-] 
-
-[tasks.sign-macos-intel]
-description = "Sign Intel macOS binary if APPLE_DEVELOPER_ID is set"
-dependencies = ["build-macos-intel"]
-env_files = ["./.env"]
-condition = { files_exist = ["./.env"] }
-script = '''
-BINARY_PATH="target/x86_64-apple-darwin/release/koshelf"
-if [ -n "$APPLE_DEVELOPER_ID" ]; then
-    if codesign --sign "$APPLE_DEVELOPER_ID" --timestamp --options runtime "$BINARY_PATH"; then
-        echo "✅ Successfully signed Intel macOS binary."
-    else
-        echo "❌ Failed to sign Intel macOS binary."
-    fi
-else
-    echo "APPLE_DEVELOPER_ID not set, skipping code signing for Intel macOS binary."
-fi
-'''
-
-[tasks.sign-macos-silicon]
-description = "Sign Apple Silicon macOS binary if APPLE_DEVELOPER_ID is set"
-dependencies = ["build-macos-silicon"]
-env_files = ["./.env"]
-condition = { files_exist = ["./.env"] }
-script = '''
-BINARY_PATH="target/aarch64-apple-darwin/release/koshelf"
-if [ -n "$APPLE_DEVELOPER_ID" ]; then
-    if codesign --sign "$APPLE_DEVELOPER_ID" --timestamp --options runtime "$BINARY_PATH"; then
-        echo "✅ Successfully signed Apple Silicon macOS binary."
-    else
-        echo "❌ Failed to sign Apple Silicon macOS binary."
-    fi
-else
-    echo "APPLE_DEVELOPER_ID not set, skipping code signing for Apple Silicon macOS binary."
-fi
-'''
-
-[tasks.sign-macos-universal]
-description = "Sign Universal macOS binary if APPLE_DEVELOPER_ID is set"
-dependencies = ["build-macos-universal"]
-env_files = ["./.env"]
-condition = { files_exist = ["./.env"] }
-script = '''
-BINARY_PATH="target/universal-apple-darwin/release/koshelf"
-if [ -n "$APPLE_DEVELOPER_ID" ]; then
-    if codesign --sign "$APPLE_DEVELOPER_ID" --timestamp --options runtime "$BINARY_PATH"; then
-        echo "✅ Successfully signed Universal macOS binary."
-    else
-        echo "❌ Failed to sign Universal macOS binary."
-    fi
-else
-    echo "APPLE_DEVELOPER_ID not set, skipping code signing for Universal macOS binary."
-fi
-''' 
-
-[tasks.notarize-macos-intel]
-description = "Notarize Intel macOS zip if APPLE_USERNAME and APPLE_PASSWORD are set"
-dependencies = ["package-macos-intel"]
-env_files = ["./.env"]
-condition = { files_exist = ["./.env"] }
-script = '''
-ZIP_PATH="release/apple-darwin-x86_64.zip"
-TEAM_ID=$(echo "$APPLE_DEVELOPER_ID" | sed -n 's/.*(\(.*\)).*/\1/p')
-if [ -n "$APPLE_USERNAME" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$TEAM_ID" ]; then
-    if xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_USERNAME" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID" --wait; then
-        echo "✅ Successfully notarized Intel macOS zip."
-    else
-        echo "❌ Failed to notarize Intel macOS zip."
-    fi
-else
-    echo "APPLE_USERNAME, APPLE_PASSWORD, or APPLE_DEVELOPER_ID not set, skipping notarization for Intel macOS zip."
-fi
-'''
-
-[tasks.notarize-macos-silicon]
-description = "Notarize Apple Silicon macOS zip if APPLE_USERNAME and APPLE_PASSWORD are set"
-dependencies = ["package-macos-silicon"]
-env_files = ["./.env"]
-condition = { files_exist = ["./.env"] }
-script = '''
-ZIP_PATH="release/apple-darwin-aarch64.zip"
-TEAM_ID=$(echo "$APPLE_DEVELOPER_ID" | sed -n 's/.*(\(.*\)).*/\1/p')
-if [ -n "$APPLE_USERNAME" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$TEAM_ID" ]; then
-    if xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_USERNAME" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID" --wait; then
-        echo "✅ Successfully notarized Apple Silicon macOS zip."
-    else
-        echo "❌ Failed to notarize Apple Silicon macOS zip."
-    fi
-else
-    echo "APPLE_USERNAME, APPLE_PASSWORD, or APPLE_DEVELOPER_ID not set, skipping notarization for Apple Silicon macOS zip."
-fi
-'''
-
-[tasks.notarize-macos-universal]
-description = "Notarize Universal macOS zip if APPLE_USERNAME and APPLE_PASSWORD are set"
-dependencies = ["package-macos-universal"]
-env_files = ["./.env"]
-condition = { files_exist = ["./.env"] }
-script = '''
-ZIP_PATH="release/apple-darwin-universal.zip"
-TEAM_ID=$(echo "$APPLE_DEVELOPER_ID" | sed -n 's/.*(\(.*\)).*/\1/p')
-if [ -n "$APPLE_USERNAME" ] && [ -n "$APPLE_PASSWORD" ] && [ -n "$TEAM_ID" ]; then
-    if xcrun notarytool submit "$ZIP_PATH" --apple-id "$APPLE_USERNAME" --password "$APPLE_PASSWORD" --team-id "$TEAM_ID" --wait; then
-        echo "✅ Successfully notarized Universal macOS zip."
-    else
-        echo "❌ Failed to notarize Universal macOS zip."
-    fi
-else
-    echo "APPLE_USERNAME, APPLE_PASSWORD, or APPLE_DEVELOPER_ID not set, skipping notarization for Universal macOS zip."
-fi
-''' 
+    "pack-linux-arm64",
+    "pack-linux-x64",
+    "pack-windows",
+    "pack-mac"
+]

@@ -1,0 +1,23 @@
+# Cross.toml
+
+[build.env]
+passthrough = [
+    "KOSHELF_SKIP_NODE_BUILD",
+    "KOSHELF_SKIP_NPM_INSTALL",
+]
+
+# --- Linux ARM64 (CasaOS / Raspberry Pi) ---
+[target.aarch64-unknown-linux-gnu.env]
+KOSHELF_SKIP_NODE_BUILD = "true"
+KOSHELF_SKIP_NPM_INSTALL = "true"
+# Nota: Não definimos KOSHELF_SKIP_FONT_DOWNLOAD, permitindo que o build baixe a fonte.
+
+# --- Linux x64 (PC/Servidores Padrão) ---
+[target.x86_64-unknown-linux-gnu.env]
+KOSHELF_SKIP_NODE_BUILD = "true"
+KOSHELF_SKIP_NPM_INSTALL = "true"
+
+# --- Windows (x64) ---
+[target.x86_64-pc-windows-gnu.env]
+KOSHELF_SKIP_NODE_BUILD = "true"
+KOSHELF_SKIP_NPM_INSTALL = "true"
