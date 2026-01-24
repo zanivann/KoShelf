@@ -8,14 +8,14 @@
 # KoShelf
 
 <p>
-  <a href="https://github.com/zanivann/koshelf/stargazers">
+  <a href="https://github.com/zanivann/KoShelf/stargazers">
     <img src="https://img.shields.io/github/stars/zanivann/koshelf?style=social" alt="Stars" />
   </a>
-  <a href="https://github.com/zanivann/zanivann/releases/latest">
-    <img src="https://img.shields.io/github/v/release/zanivann/koshelf?label=release" alt="Última versão" />
+  <a href="https://github.com/zanivann/KoShelf/tags">
+    <img src="https://img.shields.io/github/v/release/zanivann/koshelf?label=release" alt="Latest Release" />
   </a>
-  <a href="https://github.com/zanivann/koshelf/blob/main/LICENSE">
-    <img src="https://img.shields.io/github/license/zanivann/koshelf" alt="Licença" />
+  <a href="https://github.com/zanivann/KoShelf/blob/main/License">
+    <img src="https://img.shields.io/github/license/zanivann/koshelf" alt="License" />
   </a>
 </p>
 

@@ -3,7 +3,7 @@ name: Release Multi-Plataforma
 on:
   push:
     tags:
-      - 'v*' # Dispara sempre que criar uma tag (ex: v2.0.6)
+      - 'v*' # Dispara sempre que criar uma tag (ex: v1.8.1)
 
 jobs:
   release:
@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         include:
-          # Linux ARM64 (O que falhou no seu Mac)
+          # Linux ARM64
           - os: ubuntu-latest
             target: aarch64-unknown-linux-musl
             bin: koshelf
@@ -27,11 +27,11 @@ jobs:
             target: x86_64-pc-windows-msvc
             bin: koshelf.exe
             name: koshelf-windows-x64.zip
-          # macOS (Universal: Intel + Apple Silicon)
+          # macOS (Apple Silicon/Universal)
           - os: macos-latest
             target: aarch64-apple-darwin
             bin: koshelf
-            name: koshelf-macos-universal.tar.gz
+            name: koshelf-macos-arm64.tar.gz
 
     steps:
       - uses: actions/checkout@v4
@@ -42,13 +42,17 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Instalar dependências de compilação (Linux)
-        if: contains(matrix.target, 'linux-musl')
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y musl-tools gcc-aarch64-linux-gnu
 
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
+        env:
+          # Define explicitamente os compiladores para evitar o erro ToolNotFound
+          CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
+          CC_x86_64_unknown_linux_musl: x86_64-linux-musl-gcc
 
       - name: Empacotar (Unix)
         if: matrix.os != 'windows-latest'
@@ -66,5 +70,6 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: ${{ matrix.name }}
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
