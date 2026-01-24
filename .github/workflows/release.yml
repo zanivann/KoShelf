@@ -30,7 +30,7 @@ jobs:
             name: koshelf-macos-arm64.tar.gz
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: action/checkout@v4
 
       - name: Instalar Rust
         uses: dtolnay/rust-toolchain@stable
@@ -46,19 +46,18 @@ jobs:
       - name: Build
         run: cargo build --release --target ${{ matrix.target }}
         env:
-          # Linkers de C principais
+          # LINKERS LINUX (Mantidos da versão anterior)
           CC_x86_64_unknown_linux_musl: musl-gcc
           CC_aarch64_unknown_linux_musl: aarch64-linux-gnu-gcc
-          # Linkers de C++
           CXX_x86_64_unknown_linux_musl: g++
           CXX_aarch64_unknown_linux_musl: aarch64-linux-gnu-g++
           
-          # RESOLUÇÃO PARA LUAJIT / MLUA:
-          # Forçamos o build do LuaJIT a usar o musl-gcc como compilador e linker de destino
-          TARGET_CC: ${{ matrix.target == 'x86_64-unknown-linux-musl' && 'musl-gcc' || (matrix.target == 'aarch64-unknown-linux-musl' && 'aarch64-linux-gnu-gcc' || '') }}
-          TARGET_LD: ${{ matrix.target == 'x86_64-unknown-linux-musl' && 'musl-gcc' || (matrix.target == 'aarch64-unknown-linux-musl' && 'aarch64-linux-gnu-gcc' || '') }}
+          # RESOLUÇÃO LUAJIT LINUX (Apenas se for Musl)
+          TARGET_CC: ${{ contains(matrix.target, 'linux-musl') && (matrix.target == 'x86_64-unknown-linux-musl' && 'musl-gcc' || 'aarch64-linux-gnu-gcc') || '' }}
+          TARGET_LD: ${{ contains(matrix.target, 'linux-musl') && (matrix.target == 'x86_64-unknown-linux-musl' && 'musl-gcc' || 'aarch64-linux-gnu-gcc') || '' }}
           
-          # Flags para evitar o conflito com libgcc_eh e _dl_find_object
+          # RUSTFLAGS CONDICIONAIS
+          # Aplicamos -lgcc apenas no Linux Musl. No macOS deixamos vazio para evitar conflitos.
           RUSTFLAGS: ${{ contains(matrix.target, 'linux-musl') && '-C link-arg=-lgcc -C link-arg=-static-libgcc' || '' }}
 
       - name: Empacotar (Unix)
