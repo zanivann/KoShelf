@@ -175,7 +175,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             await navigator.share({
                                 files: [file],
                                 title: translation.get('my-reading-recap'),
-                                text: `📚 My ${year} reading journey! These graphics were crafted by KoShelf, my KoReader reading companion. Check it out: https://github.com/paviro/KoShelf`,
+                                text: `📚 My ${year} reading journey! These graphics were crafted by KoShelf, my KoReader reading companion. Check it out: https://github.com/zanivann/KoShelf`,
                             });
                         } else {
                             // Fallback to download if file sharing isn't supported

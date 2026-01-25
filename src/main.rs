@@ -12,7 +12,7 @@ async fn main() -> Result<()> {
 
     // Handle --github flag
     if cli.github {
-        println!("https://github.com/paviro/KOShelf");
+        println!("https://github.com/zanivann/KOShelf");
         return Ok(());
     }
 

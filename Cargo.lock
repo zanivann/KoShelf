@@ -2267,6 +2267,7 @@ dependencies = [
  "minify-html",
  "mlua",
  "notify",
+ "once_cell",
  "quick-xml",
  "rayon",
  "regex",

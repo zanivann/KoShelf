@@ -33,6 +33,9 @@ reading-companion = Reading Companion
 # Used in footer/sidebar for update time
 last-updated = Last updated
 view-details = View Details
+error-generic = An error occurred!
+error-reloading = Error reloading the page!
+error-language-change = Failed to change language!
 
 # -----------------------------------
 #        Book List & Library

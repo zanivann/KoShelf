@@ -6,9 +6,7 @@
 //! 3. English fallback (`en.ftl`) - used for any missing keys
 
 use anyhow::Result;
-
 use std::str::FromStr;
-
 use include_dir::{Dir, include_dir};
 use unic_langid::LanguageIdentifier;
 
@@ -33,50 +31,54 @@ pub struct Translations {
 impl Translations {
     /// Load translations for the specified language.
     pub fn load(language: &str) -> Result<Self> {
-        let lang_id: LanguageIdentifier = language
-            .parse()
-            .unwrap_or_else(|_| panic!("Invalid locale code '{}'", language));
+        // CORRECTION: Replaced panic with a safe fallback to "en"
+        let lang_id: LanguageIdentifier = language.parse().unwrap_or_else(|e| {
+            log::warn!("Invalid locale code '{}': {}. Defaulting to 'en'.", language, e);
+            "en".parse().unwrap()
+        });
 
         let normalized = lang_id.to_string().replace("-", "_");
-
-        if !normalized.contains('_') {
-            panic!(
-                "Invalid locale '{}': full locale required (e.g. de_DE)",
-                language
-            );
-        }
-
         let parts: Vec<&str> = normalized.split('_').collect();
+        
+        // This handles both "pt_BR" (len 2) and "fr" (len 1)
         let lang_code = parts[0].to_string();
-        let region_code = parts[1..].join("_");
+        
+        let region_code = if parts.len() > 1 {
+            parts[1..].join("_")
+        } else {
+            String::new()
+        };
 
         let mut bundle = FluentBundle::new(vec![lang_id.clone()]);
         let mut ordered_sources = Vec::new();
 
-        // 1. Regional Variant (Highest Priority)
-        let regional_filename = format!("{}_{}.ftl", lang_code, region_code);
-        if let Some(file) = LOCALES.get_file(&regional_filename) {
-            ordered_sources.push(file.contents_utf8().unwrap_or("").to_string());
+        // 1. Regional Variant (Highest Priority) - e.g. "pt_BR.ftl"
+        if !region_code.is_empty() {
+            let regional_filename = format!("{}_{}.ftl", lang_code, region_code);
+            if let Some(file) = LOCALES.get_file(&regional_filename) {
+                ordered_sources.push(file.contents_utf8().unwrap_or("").to_string());
+            }
         }
 
-        // 2. Base Language
+        // 2. Base Language - e.g. "fr.ftl" or "pt.ftl"
         let base_filename = format!("{}.ftl", lang_code);
         if let Some(file) = LOCALES.get_file(&base_filename) {
             ordered_sources.push(file.contents_utf8().unwrap_or("").to_string());
         }
 
-        // 3. English Fallback (always included for non-English locales)
+        // 3. English Fallback
         if lang_code != "en" {
-            let en_file = LOCALES.get_file("en.ftl").expect("en.ftl must exist");
-            ordered_sources.push(en_file.contents_utf8().unwrap_or("").to_string());
+            if let Some(en_file) = LOCALES.get_file("en.ftl") {
+                ordered_sources.push(en_file.contents_utf8().unwrap_or("").to_string());
+            } else {
+                log::warn!("en.ftl not found in embedded locales! Fallback might be incomplete.");
+            }
         }
 
-        // Add resources in priority order. FluentBundle uses "first definition wins",
-        // so regional overrides take precedence over base language, which takes precedence over English.
+        // Add resources in priority order
         for source in &ordered_sources {
             let resource = FluentResource::try_new(source.clone())
                 .map_err(|(_, errs)| anyhow::anyhow!("Failed to parse FTL: {:?}", errs))?;
-            // Ignore duplicate key errors (expected for our fallback strategy)
             let _ = bundle.add_resource(resource);
         }
 
@@ -88,12 +90,8 @@ impl Translations {
     }
 
     /// Generate JSON for frontend.
-    /// Returns { "language": "...", "resources": [ "content1", "content2" ] }
-    /// Frontend will use these to create its own Bundle.
-    /// Comments and blank lines are stripped to reduce payload size.
     pub fn to_json_string(&self) -> String {
         let bcp47_language = self.language.replace('_', "-");
-        // Strip comments and blank lines from FTL content
         let stripped_resources: Vec<String> = self
             .resources_content
             .iter()
@@ -128,7 +126,6 @@ impl Translations {
     pub fn get_with_num<T: std::fmt::Display + Copy>(&self, key: &str, count: T) -> String {
         let mut args = FluentArgs::new();
         let val_str = count.to_string();
-        // FluentBundle requires f64 for proper plural rule selection
         if let Ok(num) = val_str.parse::<f64>() {
             args.set("count", num);
         } else {
@@ -137,7 +134,6 @@ impl Translations {
         self.format(key, Some(&args))
     }
 
-    /// Format a message using the bundle, handling both simple keys and attribute syntax (key.attr).
     fn format(&self, key: &str, args: Option<&FluentArgs>) -> String {
         let (msg_id, attr_id) = if let Some(idx) = key.find('.') {
             (&key[0..idx], Some(&key[idx + 1..]))
@@ -166,7 +162,7 @@ impl Translations {
         let value = self.bundle.format_pattern(pattern, args, &mut errors);
 
         if !errors.is_empty() {
-            eprintln!("Formatting errors for key '{}': {:?}", key, errors);
+            log::warn!("Formatting errors for key '{}': {:?}", key, errors);
         }
 
         value.into_owned()
@@ -208,18 +204,22 @@ impl Translations {
 pub fn list_supported_languages() -> String {
     use std::collections::BTreeMap;
     let mut languages: BTreeMap<String, String> = BTreeMap::new();
+    
     for file in LOCALES.files() {
         let filename = file
             .path()
             .file_name()
             .and_then(|n| n.to_str())
             .unwrap_or("");
+        
         if !filename.ends_with(".ftl") {
             continue;
         }
+        
         let content = file.contents_utf8().unwrap_or("");
         let mut name = String::new();
         let mut dialect = String::new();
+        
         for line in content.lines() {
             let line = line.trim();
             if !line.starts_with("-") {
@@ -233,6 +233,7 @@ pub fn list_supported_languages() -> String {
                 }
             }
         }
+        
         if !dialect.is_empty() && !name.is_empty() {
             languages.insert(dialect, name);
         } else {
@@ -242,6 +243,7 @@ pub fn list_supported_languages() -> String {
             }
         }
     }
+    
     let mut output = String::new();
     output.push_str("Supported Languages:\n\n");
     for (code, name) in &languages {

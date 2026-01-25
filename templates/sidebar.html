@@ -1,5 +1,4 @@
 <div class="hidden lg:flex fixed left-0 top-0 bottom-0 w-64 bg-white/90 dark:bg-dark-950/75 backdrop-blur-sm border-r border-gray-200/50 dark:border-dark-700/50 flex-col z-30">
-    <!-- Logo/Brand -->
     <div class="py-4 px-6 border-b border-gray-200/50 dark:border-dark-700/50">
         <div class="flex items-center space-x-3">
             <div class="w-10 h-10 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center shadow-lg">
@@ -14,7 +13,6 @@
         </div>
     </div>
     
-    <!-- Navigation -->
     <nav class="flex-1 px-4 py-6 space-y-3">
         {% for nav_item in navbar_items %}
         <a {% if nav_item.id.is_some() %}id="{{ nav_item.id.as_ref().unwrap() }}"{% endif %} onclick="if (typeof smartBack === 'function' && ('{{ nav_item.href }}' === '/' || '{{ nav_item.href }}' === '/comics/' || '{{ nav_item.href }}' === '/calendar/')) { smartBack(event, '{{ nav_item.href }}'); }" href="{{ nav_item.href }}" class="sidebar-item-modern {% if nav_item.is_active %}sidebar-item-modern-active{% endif %} group">
@@ -27,8 +25,27 @@
         </a>
         {% endfor %}
     </nav>
+
+    <div class="px-4 pb-2 mt-auto">
+        <div class="relative group">
+            <div class="pointer-events-none absolute inset-y-0 left-0 pl-2.5 flex items-center z-10">
+                <svg class="h-3.5 w-3.5 text-gray-400 dark:text-dark-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5h12M9 3v2m1.048 9.5A18.022 18.022 0 016.412 9m6.088 9h7M11 21l5-10 5 10M12.751 5C11.783 10.77 8.07 15.61 3 18.129" />
+                </svg>
+            </div>
+            
+            <select id="lang-select" class="appearance-none w-full bg-gray-50 dark:bg-dark-800 border border-gray-200 dark:border-dark-700 text-gray-600 dark:text-dark-300 text-xs rounded-lg py-2 pl-8 pr-8 focus:outline-none focus:ring-1 focus:ring-primary-500 cursor-pointer hover:bg-gray-100 dark:hover:bg-dark-700 transition-colors">
+                <option value="" disabled selected>...</option>
+            </select>
+            
+            <div class="pointer-events-none absolute inset-y-0 right-0 pr-2 flex items-center z-10">
+                <svg class="h-3 w-3 text-gray-400 dark:text-dark-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
+                </svg>
+            </div>
+        </div>
+    </div>
     
-    <!-- Footer with GitHub and Version -->
     <div class="mt-auto px-4 py-4 border-t border-gray-200/50 dark:border-dark-700/50">
         <div class="bg-gray-100/50 dark:bg-dark-900/50 border border-gray-200/50 dark:border-dark-700/50 rounded-lg p-3">
             <div class="update-hidden">
@@ -38,7 +55,7 @@
                             <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"></path>
                         </svg>
                     </div>
-                    <a href="https://github.com/paviro/KOShelf" target="_blank" class="text-xs text-gray-500 dark:text-dark-400 hover:text-primary-400 transition-colors font-medium">{{ translation.get("github") }}</a>
+                    <a href="https://github.com/zanivann/KOShelf" target="_blank" class="text-xs text-gray-500 dark:text-dark-400 hover:text-primary-400 transition-colors font-medium">{{ translation.get("github") }}</a>
                     <span class="text-xs text-gray-400 dark:text-dark-500 ml-1">· v{{ version }}</span>
                 </div>
                 <div class="text-xs text-gray-400 dark:text-dark-500">
@@ -55,4 +72,4 @@
             </div>
         </div>
     </div>
-</div> 
+</div>
