@@ -18,7 +18,7 @@ use crate::models::{BookStatus, ContentType, LibraryItem, StatisticsData};
 use crate::library::MetadataLocation; 
 use crate::time_config::TimeConfig;
 use anyhow::Result;
-use log::info;
+use log::{info, error, warn};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
@@ -31,6 +31,9 @@ use utils::{NavContext, UiContext};
 pub fn generate_site(library: &Vec<LibraryItem>, output_dir: &Path) -> Result<()> {
     // 1. Get current global language
     let lang = crate::i18n::get_global_locale();
+
+    info!("Starting manual site regeneration. Language: {}, Items: {}, Output: {:?}", 
+          lang, library.len(), output_dir);
 
     // 2. Reconstruct minimal configuration needed for generation.
     let config = SiteConfig {
@@ -57,9 +60,16 @@ pub fn generate_site(library: &Vec<LibraryItem>, output_dir: &Path) -> Result<()
         .enable_all()
         .build()?;
 
-    rt.block_on(async {
+    let result = rt.block_on(async {
         generator.generate_with_items(library.clone()).await
-    })
+    });
+
+    match &result {
+        Ok(_) => info!("Regeneration completed successfully."),
+        Err(e) => error!("Regeneration failed: {:?}", e),
+    }
+
+    result
 }
 
 // --- ESTRUTURAS PRINCIPAIS ---
@@ -102,7 +112,7 @@ impl SiteGenerator {
         };
 
         let translations = Rc::new(Translations::load(&current_lang).unwrap_or_else(|e| {
-            log::warn!("Failed to load translations for '{}': {}. Fallback to en.", current_lang, e);
+            warn!("Failed to load translations for '{}': {}. Fallback to en.", current_lang, e);
             Translations::load("en").expect("English translations must exist")
         }));
 

@@ -52,14 +52,7 @@ async fn set_language_handler(
 
     // 3. Executa a regeneração (operação pesada) numa thread separada
     let result = web::block(move || {
-        // Tenta chamar a função geral de geração. 
-        // Se ela não existir no mod.rs, você pode chamar os sub-módulos individualmente aqui.
-        // Exemplo:
-        // crate::site_generator::library_pages::generate_pages(&items, &out_path)?;
-        // crate::site_generator::statistics::generate_stats(&items, &out_path)?;
-        // ... etc
-        
-        // Vamos assumir que você criou 'generate_site' no passo anterior:
+        // Chama a função de geração que expusemos no site_generator/mod.rs
         crate::site_generator::generate_site(&items, &out_path)
     }).await;
 
@@ -180,8 +173,16 @@ impl WebServer {
                 // INJEÇÃO IMPORTANTE: Passamos o caminho de saída para o handler usar
                 .app_data(web::Data::new(output_dir_data.clone())) 
                 .configure(Self::configure_api)
-                .service(fs::Files::new("/books", library_path.clone()).show_files_listing())
-                .service(fs::Files::new("/settings", library_path.clone()))
+                
+                // --- CORREÇÃO DE ROTAS AQUI ---
+                // Mudamos de "/books" para "/raw" para NÃO conflitar com o HTML gerado em /books/titulo/
+                .service(fs::Files::new("/raw", library_path.clone()).show_files_listing())
+                
+                // Opcional: Mudar settings também se houver conflito, ou remover se não usa
+                // .service(fs::Files::new("/settings", library_path.clone())) 
+
+                // A rota raiz ("/") serve o output_dir. 
+                // Agora, uma requisição para /books/titulo cairá AQUI (correto), e não no /raw (errado).
                 .service(fs::Files::new("/", output_dir.clone()).index_file("index.html"))
         })
         .bind(("0.0.0.0", self.port))?
