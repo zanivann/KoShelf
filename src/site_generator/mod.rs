@@ -28,7 +28,11 @@ use utils::{NavContext, UiContext};
 // --- FUNÇÃO GLOBAL DE GERAÇÃO (Usada pelo web.rs) ---
 
 /// Helper function to trigger full site regeneration from Web Server API.
-pub fn generate_site(library: &Vec<LibraryItem>, output_dir: &Path) -> Result<()> {
+pub fn generate_site(
+    library: &Vec<LibraryItem>, 
+    output_dir: &Path, 
+    statistics_db_path: Option<PathBuf> // <--- NEW ARGUMENT
+) -> Result<()> {
     // 1. Get current global language
     let lang = crate::i18n::get_global_locale();
 
@@ -38,9 +42,9 @@ pub fn generate_site(library: &Vec<LibraryItem>, output_dir: &Path) -> Result<()
     // 2. Reconstruct minimal configuration needed for generation.
     let config = SiteConfig {
         output_dir: output_dir.to_path_buf(),
-        library_paths: vec![], // We won't scan again
+        library_paths: vec![],
         metadata_location: MetadataLocation::default(), 
-        statistics_db_path: None, 
+        statistics_db_path: statistics_db_path, // <--- USE IT HERE
         language: lang,
         site_title: "KoShelf Library".to_string(),
         include_unread: true, 

@@ -98,17 +98,16 @@ pub async fn run(cli: Cli) -> Result<()> {
         RunMode::Serve => {
             let version_notifier = create_version_notifier();
             let file_watcher = FileWatcher::new(config.clone(), Some(version_notifier.clone()));
-            
-            // Pegamos o primeiro caminho da biblioteca fornecido via CLI
-            // No seu caso: /Users/helder/Documents/Projetos/koshelf/Livros
             let library_path = cli.library_path.first().cloned().unwrap_or_default();
 
+            // CHANGE: Pass cli.statistics_db (the 6th argument)
             let web_server = WebServer::new(
                 plan.output_dir, 
                 cli.port, 
                 version_notifier, 
                 library_items,
-                library_path // Este é o 5º argumento
+                library_path,
+                cli.statistics_db // <--- PASS HERE
             );
 
             info!("Server mode active. Port: {}", cli.port);

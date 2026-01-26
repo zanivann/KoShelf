@@ -288,3 +288,9 @@ minutes_label = { $count ->
     [one] minute
    *[other] minutes
 }
+
+# -----------------------------------
+#             Settings
+# -----------------------------------
+settings = Settings
+language = Language

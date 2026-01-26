@@ -17,6 +17,7 @@ pub struct WebServer {
     version_notifier: Arc<VersionNotifier>,
     library_items: Arc<Vec<LibraryItem>>,
     library_path: PathBuf,
+    statistics_db_path: Option<PathBuf>, // <--- ADD FIELD
 }
 
 // Estrutura para receber o JSON { "lang": "pt" }
@@ -33,27 +34,26 @@ async fn get_languages_handler() -> impl Responder {
     HttpResponse::Ok().json(languages)
 }
 
-// Recebe a troca de idioma e REGENERA o site
+// CHANGE: Update handler signature and logic
 async fn set_language_handler(
     payload: web::Json<LanguagePayload>,
     library: web::Data<Arc<Vec<LibraryItem>>>,
-    output_dir: web::Data<PathBuf>, // Recebe o caminho via AppData
+    output_dir: web::Data<PathBuf>,
+    stats_path: web::Data<Option<PathBuf>>, // <--- INJECT DATA
 ) -> impl Responder {
     let new_lang = payload.lang.clone();
     
     log::info!("Mudando idioma para '{}' e regenerando site...", new_lang);
     
-    // 1. Atualiza o idioma na memória global
     set_global_locale(new_lang);
 
-    // 2. Clona dados para mover para a thread de bloqueio
     let items = library.get_ref().clone();
     let out_path = output_dir.get_ref().clone();
+    let db_path = stats_path.get_ref().clone(); // <--- CLONE PATH
 
-    // 3. Executa a regeneração (operação pesada) numa thread separada
     let result = web::block(move || {
-        // Chama a função de geração que expusemos no site_generator/mod.rs
-        crate::site_generator::generate_site(&items, &out_path)
+        // CHANGE: Pass db_path to generate_site
+        crate::site_generator::generate_site(&items, &out_path, db_path)
     }).await;
 
     match result {
@@ -76,6 +76,7 @@ impl WebServer {
         version_notifier: Arc<VersionNotifier>,
         library_items: Arc<Vec<LibraryItem>>,
         library_path: PathBuf,
+        statistics_db_path: Option<PathBuf>, // <--- ADD ARGUMENT
     ) -> Self {
         Self {
             output_dir,
@@ -83,6 +84,7 @@ impl WebServer {
             version_notifier,
             library_items,
             library_path,
+            statistics_db_path, // <--- STORE IT
         }
     }
 
@@ -92,7 +94,6 @@ impl WebServer {
                 .route("/stats", web::get().to(Self::get_stats_handler))
                 .route("/events/version", web::get().to(Self::version_events_handler))
                 .route("/languages", web::get().to(get_languages_handler))
-                // Nova rota para salvar e regenerar
                 .route("/settings/language", web::post().to(set_language_handler))
         );
     }
@@ -145,9 +146,10 @@ impl WebServer {
         let library_items = self.library_items.clone();
         let version_notifier = self.version_notifier.clone();
         let library_path = self.library_path.clone();
-
-        // Variável auxiliar para passar o caminho para o App::data
         let output_dir_data = self.output_dir.clone();
+        
+        // CHANGE: Capture stats path for injection
+        let stats_path_data = self.statistics_db_path.clone();
 
         log::info!("Aguardando sincronização da biblioteca...");
         let mut retry_count = 0;
@@ -170,19 +172,11 @@ impl WebServer {
                 .wrap(Cors::permissive())
                 .app_data(web::Data::new(library_items.clone()))
                 .app_data(web::Data::new(version_notifier.clone()))
-                // INJEÇÃO IMPORTANTE: Passamos o caminho de saída para o handler usar
-                .app_data(web::Data::new(output_dir_data.clone())) 
+                .app_data(web::Data::new(output_dir_data.clone()))
+                // CHANGE: Inject statistics_db_path
+                .app_data(web::Data::new(stats_path_data.clone())) 
                 .configure(Self::configure_api)
-                
-                // --- CORREÇÃO DE ROTAS AQUI ---
-                // Mudamos de "/books" para "/raw" para NÃO conflitar com o HTML gerado em /books/titulo/
                 .service(fs::Files::new("/raw", library_path.clone()).show_files_listing())
-                
-                // Opcional: Mudar settings também se houver conflito, ou remover se não usa
-                // .service(fs::Files::new("/settings", library_path.clone())) 
-
-                // A rota raiz ("/") serve o output_dir. 
-                // Agora, uma requisição para /books/titulo cairá AQUI (correto), e não no /raw (errado).
                 .service(fs::Files::new("/", output_dir.clone()).index_file("index.html"))
         })
         .bind(("0.0.0.0", self.port))?

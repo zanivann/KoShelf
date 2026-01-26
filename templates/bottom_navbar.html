@@ -10,33 +10,67 @@
                 <span class="text-xs">{{ nav_item.label }}</span>
             </a>
             {% endfor %}
+
+            <div class="w-px h-8 bg-gray-300 dark:bg-dark-700 mx-1"></div>
+
+            <button id="mobile-settings-btn" class="nav-item flex flex-col items-center py-1.5 px-2 rounded-xl min-w-fit text-gray-500 dark:text-dark-400 active:scale-95 transition-transform">
+                <svg class="w-4 h-4 mb-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span class="text-xs">{{ translation.get("settings") }}</span>
+            </button>
         </div>
     </div>
-    <script>
-        (function() {
-            const nav = document.getElementById('mobileNavScroll');
-            const active = nav && nav.querySelector('.nav-item-active');
-            if (nav && active) {
-                active.scrollIntoView({ inline: 'center', block: 'nearest' });
-            }
-        })();
-    </script>
     
     <div class="bg-white/90 dark:bg-dark-950/90 backdrop-blur-md border border-primary-500/30 shadow-2xl rounded-2xl p-3 hidden update-visible">
-        <button onclick="window.location.reload()" class="w-full flex items-center justify-between group">
-            <div class="flex items-center space-x-3">
-                 <div class="w-10 h-10 bg-primary-100 dark:bg-primary-900/30 rounded-xl flex items-center justify-center text-primary-600 dark:text-primary-400">
-                    <svg class="w-5 h-5 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-                 </div>
-                 <div class="text-left">
-                     <p class="text-sm font-bold text-gray-900 dark:text-white">{{ translation.get("new-version-available") }}</p>
-                     <p class="text-xs text-gray-500 dark:text-dark-400">{{ translation.get("tap-to-reload") }}</p>
-                 </div>
-            </div>
-            <div class="pr-2">
-                <svg class="w-5 h-5 text-gray-400 group-hover:text-primary-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
-            </div>
-        </button>
-    </div>
+        </div>
 </nav>
-{% endif %} 
+
+<div id="mobile-settings-modal" class="fixed inset-0 z-[100] hidden">
+    <div class="absolute inset-0 bg-black/50 backdrop-blur-sm transition-opacity" onclick="document.getElementById('mobile-settings-modal').classList.add('hidden')"></div>
+    
+    <div class="relative bg-white dark:bg-dark-900 rounded-2xl shadow-2xl w-11/12 max-w-sm mx-auto p-6 border border-gray-100 dark:border-dark-700 transform transition-all scale-100">
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ translation.get("settings") }}</h3>
+            <button onclick="document.getElementById('mobile-settings-modal').classList.add('hidden')" class="text-gray-400 hover:text-gray-500 dark:hover:text-dark-300">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+        </div>
+
+        <div class="space-y-3">
+            <label class="block text-sm font-medium text-gray-700 dark:text-dark-300">{{ translation.get("language") }}</label>
+            <div class="relative">
+                <select id="mobile-lang-select" class="block w-full pl-3 pr-10 py-3 text-base border-gray-300 dark:border-dark-600 focus:outline-none focus:ring-primary-500 focus:border-primary-500 sm:text-sm rounded-xl bg-gray-50 dark:bg-dark-800 text-gray-900 dark:text-white">
+                    <option value="" disabled selected>Loading...</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700 dark:text-dark-400">
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+            </div>
+        </div>
+        
+        <p class="mt-6 text-center text-xs text-gray-400 dark:text-dark-500">
+            KoShelf v{{ version }}
+        </p>
+    </div>
+</div>
+
+<script>
+    // Mobile Modal Logic
+    const mobileBtn = document.getElementById('mobile-settings-btn');
+    const mobileModal = document.getElementById('mobile-settings-modal');
+    
+    if(mobileBtn && mobileModal) {
+        mobileBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            mobileModal.classList.remove('hidden');
+        });
+    }
+
+    // Reuse the language logic logic for the mobile selector
+    // Note: You need to update your `language-selector.ts` to also target `mobile-lang-select`
+    // or simply copy the population logic here if you want a quick fix without recompiling TS immediately.
+    // Ideally, update `language-selector.ts` to look for class `lang-selector-common` instead of ID.
+</script>
+{% endif %}
