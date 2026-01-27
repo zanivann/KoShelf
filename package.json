@@ -2,8 +2,8 @@
   "scripts": {
     "build": "npm run build-css-prod && npm run build-calendar-prod && tsc",
     "build-css": "tailwindcss -i ./assets/css/input.css -o ./assets/style.css --watch",
-    "build-css-prod": "tailwindcss -i ./assets/css/input.css -o ./assets/style.css --minify",
-    "build-calendar-prod": "tailwindcss -i ./assets/css/calendar.css -o ./assets/calendar.css --minify",
+    "build-css-prod": "npx tailwindcss -i ./assets/css/input.css -o ./assets/style.css --minify",
+    "build-calendar-prod": "npx tailwindcss -i ./assets/css/calendar.css -o ./assets/calendar.css --minify",
     "format": "prettier --write \"assets/ts/**/*.ts\"",
     "format:check": "prettier --check \"assets/ts/**/*.ts\"",
     "lint": "eslint \"assets/ts/**/*.ts\"",
