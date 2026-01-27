@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KoShelf Setup</title>
+    <style>
+        :root {
+            --bg-color: #111827; --card-bg: #1f2937; --input-bg: #374151;
+            --border-color: #4b5563; --text-color: #f9fafb; --text-muted: #9ca3af;
+            --primary: #2563eb; --primary-hover: #1d4ed8;
+        }
+        body {
+            background-color: var(--bg-color); color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0;
+        }
+        .container {
+            background-color: var(--card-bg); padding: 2rem; border-radius: 0.75rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5); width: 100%; max-width: 500px;
+            border: 1px solid var(--border-color); position: relative;
+        }
+        .close-page-btn {
+            position: absolute; top: 1rem; right: 1rem; color: var(--text-muted); 
+            text-decoration: none; font-size: 1.5rem; cursor: pointer;
+        }
+        .close-page-btn:hover { color: white; }
+        
+        h1 { margin-top: 0; color: #60a5fa; font-size: 1.5rem; }
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: 0.875rem; margin-bottom: 0.5rem; }
+        .input-group { display: flex; gap: 0.5rem; }
+        input[type="text"], select {
+            flex: 1; padding: 0.6rem; background-color: var(--input-bg);
+            border: 1px solid var(--border-color); border-radius: 0.375rem; color: white; outline: none;
+        }
+        button { cursor: pointer; padding: 0.6rem 1rem; border-radius: 0.375rem; border: none; font-weight: 600; }
+        .btn-primary { background-color: var(--primary); color: white; width: 100%; margin-top: 1rem; }
+        .btn-primary:hover { background-color: var(--primary-hover); }
+        .btn-secondary { background-color: var(--input-bg); color: white; border: 1px solid var(--border-color); }
+        .btn-secondary:hover { background-color: var(--border-color); }
+        .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        .modal { display: none; position: fixed; z-index: 10; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); }
+        .modal-content {
+            background: var(--card-bg); margin: 5% auto; padding: 1.5rem;
+            border-radius: 0.5rem; width: 80%; max-width: 600px; max-height: 80vh; display: flex; flex-direction: column;
+        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+        .file-list { flex: 1; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 0.375rem; background: var(--bg-color); }
+        .file-item { padding: 0.5rem 1rem; cursor: pointer; display: flex; align-items: center; border-bottom: 1px solid #1f2937; }
+        .file-item:hover { background: var(--input-bg); }
+        .spinner { border: 3px solid rgba(255,255,255,0.3); border-top: 3px solid #fff; border-radius: 50%; width: 20px; height: 20px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 10px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="/" class="close-page-btn" id="closeBtn" style="display:none;">&times;</a>
+        
+        <h1 id="pageTitle" data-t="setup-title-welcome">Welcome to KoShelf</h1>
+        <p style="color:var(--text-muted)" id="pageDesc" data-t="setup-desc-welcome">Please configure your library to get started.</p>
+        
+        <form id="setupForm">
+            <div class="form-group">
+                <label data-t="setup-label-books">Books Folder Path</label>
+                <div class="input-group">
+                    <input type="text" id="libPath" name="library_paths" placeholder="/path/to/books" required>
+                    <button type="button" class="btn-secondary" onclick="openBrowser('libPath')" data-t="setup-btn-browse">Browse</button>
+                </div>
+            </div>
+            <div class="form-group">
+                <label data-t="setup-label-stats">Statistics Database (Optional)</label>
+                <div class="input-group">
+                    <input type="text" id="statsPath" name="statistics_db_path" placeholder="/path/to/statistics.sqlite3">
+                    <button type="button" class="btn-secondary" onclick="openBrowser('statsPath')" data-t="setup-btn-browse">Browse</button>
+                </div>
+            </div>
+            
+            <div class="form-group" id="langGroup">
+                <label data-t="setup-label-language">Language</label>
+                <select id="lang" name="language" onchange="changeLanguage(this.value)">
+                    <option value="en_US">English (US)</option>
+                    <option value="pt_BR">Português (BR)</option>
+                    <option value="de_DE">Deutsch</option>
+                    <option value="fr_FR">Français</option>
+                    <option value="es_ES">Español</option>
+                </select>
+            </div>
+
+            <button type="submit" id="submitBtn" class="btn-primary" data-t="setup-btn-start">Start KoShelf</button>
+        </form>
+    </div>
+
+    <div id="browseModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 style="margin:0" data-t="setup-modal-title">Select Folder</h3>
+                <button type="button" onclick="closeModal()" class="btn-secondary">X</button>
+            </div>
+            <div style="margin-bottom:0.5rem; font-family:monospace; color:#60a5fa" id="modalCurrentPath">/</div>
+            <div style="margin-bottom:0.5rem">
+                <button type="button" id="btnUp" class="btn-secondary" onclick="goUp()" data-t="setup-modal-up">⬆️ Up Level</button>
+            </div>
+            <div class="file-list" id="fileList">Loading...</div>
+            <div style="margin-top: 1rem; display: flex; justify-content: flex-end; gap: 0.5rem;">
+                <button type="button" class="btn-secondary" onclick="closeModal()" data-t="setup-modal-cancel">Cancel</button>
+                <button type="button" class="btn-primary" onclick="confirmSelection()" style="width: auto;" data-t="setup-modal-select">Select This Folder</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Translations (Mirroring FTL) ---
+        const translations = {
+            en_US: {
+                "setup-title-welcome": "Welcome to KoShelf-Z",
+                "setup-title-settings": "Library Configuration",
+                "setup-desc-welcome": "Please configure your library to get started.",
+                "setup-desc-settings": "Update your library paths below. The server will restart automatically.",
+                "setup-label-books": "Books Folder Path",
+                "setup-label-stats": "Statistics Database (Optional)",
+                "setup-label-language": "System Language",
+                "setup-btn-browse": "Browse",
+                "setup-btn-start": "Start KoShelf",
+                "setup-btn-save": "Save & Restart",
+                "setup-modal-title": "Select Folder",
+                "setup-modal-up": "⬆️ Up Level",
+                "setup-modal-cancel": "Cancel",
+                "setup-modal-select": "Select This Folder",
+                "setup-status-saving": "Saving & Restarting...",
+                "setup-btn-try-again": "Try Again"
+            },
+            pt_BR: {
+                "setup-title-welcome": "Bem-vindo ao KoShelf-Z",
+                "setup-title-settings": "Configuração da Biblioteca",
+                "setup-desc-welcome": "Por favor, configure sua biblioteca para começar.",
+                "setup-desc-settings": "Atualize os caminhos abaixo. O servidor reiniciará automaticamente.",
+                "setup-label-books": "Caminho da Pasta de Livros",
+                "setup-label-stats": "Banco de Dados de Estatísticas (Opcional)",
+                "setup-label-language": "Idioma do Sistema",
+                "setup-btn-browse": "Procurar",
+                "setup-btn-start": "Iniciar KoShelf",
+                "setup-btn-save": "Salvar e Reiniciar",
+                "setup-modal-title": "Selecionar Pasta",
+                "setup-modal-up": "⬆️ Subir Nível",
+                "setup-modal-cancel": "Cancelar",
+                "setup-modal-select": "Selecionar Esta Pasta",
+                "setup-status-saving": "Salvando e Reiniciando...",
+                "setup-btn-try-again": "Tentar Novamente"
+            }
+            // Add other languages here if needed
+        };
+
+        let currentLang = 'en_US';
+        let isEditMode = false;
+
+        function changeLanguage(lang) {
+            currentLang = lang;
+            const t = translations[lang] || translations['en_US'];
+            
+            // Apply text to all elements with data-t attribute
+            document.querySelectorAll('[data-t]').forEach(el => {
+                const key = el.getAttribute('data-t');
+                
+                // Context-sensitive keys (Welcome vs Settings)
+                if (key === 'setup-title-welcome' && isEditMode) el.textContent = t['setup-title-settings'];
+                else if (key === 'setup-title-welcome') el.textContent = t['setup-title-welcome'];
+                
+                else if (key === 'setup-desc-welcome' && isEditMode) el.textContent = t['setup-desc-settings'];
+                else if (key === 'setup-desc-welcome') el.textContent = t['setup-desc-welcome'];
+                
+                else if (key === 'setup-btn-start' && isEditMode) el.textContent = t['setup-btn-save'];
+                else if (key === 'setup-btn-start') el.textContent = t['setup-btn-start'];
+                
+                else if (t[key]) el.textContent = t[key];
+            });
+        }
+
+        // --- Initialization ---
+        window.addEventListener('DOMContentLoaded', async () => {
+            // Default browser language detection
+            const browserLang = navigator.language.replace('-', '_');
+            if (translations[browserLang]) {
+                document.getElementById('lang').value = browserLang;
+                changeLanguage(browserLang);
+            }
+
+            try {
+                // Check if we are in "Edit Mode" (config exists)
+                const res = await fetch('/api/config');
+                if (res.ok) {
+                    const config = await res.json();
+                    isEditMode = true;
+
+                    // Hide Language selector in Edit Mode (Sidebar handles it)
+                    document.getElementById('langGroup').style.display = 'none';
+                    document.getElementById('closeBtn').style.display = 'block';
+
+                    // Pre-fill paths
+                    if (config.library_paths && config.library_paths.length > 0) {
+                        document.getElementById('libPath').value = config.library_paths[0];
+                    }
+                    if (config.statistics_db_path) {
+                        document.getElementById('statsPath').value = config.statistics_db_path;
+                    }
+                    
+                    // Use server language for UI text, even if selector is hidden
+                    if (config.language && translations[config.language]) {
+                        changeLanguage(config.language);
+                        // We also set the hidden select value so it submits correctly
+                        document.getElementById('lang').value = config.language;
+                    }
+                }
+            } catch (e) {
+                // Setup mode
+            }
+            
+            // Refresh texts based on mode
+            changeLanguage(document.getElementById('lang').value);
+        });
+
+        // --- Browse Logic & Form Submit (Same as before) ---
+        let targetInputId = '';
+        let currentBrowsePath = '/';
+        let parentPath = null;
+        
+        function openBrowser(inputId) {
+            targetInputId = inputId;
+            document.getElementById('browseModal').style.display = 'block';
+            const val = document.getElementById(inputId).value;
+            loadPath(val && val.startsWith('/') ? val : '/');
+        }
+        function closeModal() { document.getElementById('browseModal').style.display = 'none'; }
+        function goUp() { if(parentPath) loadPath(parentPath); }
+        function confirmSelection() { 
+            document.getElementById(targetInputId).value = currentBrowsePath;
+            closeModal();
+        }
+        
+        async function loadPath(path) {
+            document.getElementById('fileList').innerHTML = '<div style="padding:1rem">Loading...</div>';
+            try {
+                const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+                const data = await res.json();
+                if (data.error) { if (path !== '/') loadPath('/'); return; }
+                
+                currentBrowsePath = data.current;
+                parentPath = data.parent;
+                document.getElementById('modalCurrentPath').textContent = currentBrowsePath;
+                document.getElementById('btnUp').disabled = !parentPath;
+                
+                const list = document.getElementById('fileList');
+                list.innerHTML = '';
+                data.entries.forEach(entry => {
+                    const div = document.createElement('div');
+                    div.className = 'file-item';
+                    const icon = entry.type === 'dir' ? '📁' : '📄';
+                    div.innerHTML = `<span style="margin-right:10px">${icon}</span> <span>${entry.name}</span>`;
+                    div.onclick = () => {
+                        if (entry.type === 'dir') loadPath(entry.path);
+                        else { currentBrowsePath = entry.path; confirmSelection(); }
+                    };
+                    list.appendChild(div);
+                });
+            } catch(e) { document.getElementById('fileList').innerHTML = 'Error'; }
+        }
+
+        document.getElementById('setupForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const btn = document.getElementById('submitBtn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            
+            // Get current language dictionary
+            const t = translations[document.getElementById('lang').value] || translations['en_US'];
+            btn.innerHTML = `<span class="spinner"></span> ${t['setup-status-saving']}`;
+
+            const data = {
+                library_paths: [document.getElementById('libPath').value],
+                statistics_db_path: document.getElementById('statsPath').value || null,
+                language: document.getElementById('lang').value
+            };
+
+            try {
+                const res = await fetch('/api/setup', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) setTimeout(checkServer, 2000);
+                else {
+                    const err = await res.text();
+                    alert('Error: ' + err);
+                    btn.disabled = false;
+                    btn.textContent = originalText;
+                }
+            } catch (e) { setTimeout(checkServer, 2000); }
+        };
+
+        async function checkServer() {
+            try {
+                const res = await fetch('/api/events/version');
+                if (res.ok) window.location.href = '/'; 
+                else setTimeout(checkServer, 1000);
+            } catch { setTimeout(checkServer, 1000); }
+        }
+    </script>
+</body>
+</html>

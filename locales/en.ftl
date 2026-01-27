@@ -1,5 +1,5 @@
 # ===========================================
-#      English (en) — Base Language File
+#       English (en) — Base Language File
 # ===========================================
 # This is the base translation file for English, using US English vocabulary.
 # Regional variants (e.g., en_GB.ftl) should only override keys that differ.
@@ -290,7 +290,43 @@ minutes_label = { $count ->
 }
 
 # -----------------------------------
-#             Settings
+#            Settings
 # -----------------------------------
 settings = Settings
 language = Language
+# Setup Screen (Legacy)
+setup-title = Welcome to KoShelf
+setup-description = It looks like this is your first time here. Please configure your library to get started.
+setup-library-path = Library Folder Path
+setup-library-path-placeholder = /path/to/your/books
+setup-stats-path = Statistics Database (Optional)
+setup-stats-path-placeholder = /path/to/statistics.sqlite3
+setup-language = Language
+setup-save = Save Configuration
+setup-success = Configuration Saved!
+setup-restart-msg = Please restart the application to load your library.
+
+
+# Sidebar & Navigation
+nav-library-settings = Library Configuration
+
+# Setup / Configuration Screen
+setup-title-welcome = Welcome to KoShelf
+setup-title-settings = Library Configuration
+setup-desc-welcome = Please configure your library to get started.
+setup-desc-settings = Update your library paths below. The server will restart automatically.
+setup-label-books = Books Folder Path
+setup-label-stats = Statistics Database (Optional)
+setup-label-language = System Language
+setup-placeholder-books = /path/to/books
+setup-placeholder-stats = /path/to/statistics.sqlite3
+setup-btn-browse = Browse
+setup-btn-start = Start KoShelf
+setup-btn-save = Save & Restart
+setup-modal-title = Select Folder
+setup-modal-up = ⬆️ Up Level
+setup-modal-cancel = Cancel
+setup-modal-select = Select This Folder
+setup-error-load = Error loading path
+setup-status-saving = Saving & Restarting...
+setup-btn-try-again = Try Again

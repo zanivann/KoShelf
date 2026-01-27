@@ -120,13 +120,16 @@ pub fn parse_time_to_seconds(time_str: &str) -> Result<Option<u32>> {
 
 impl Cli {
     /// Validate CLI inputs that are independent of runtime mode.
-    pub fn validate(&self) -> Result<()> {
-        // Require at least one of library_path or statistics_db
-        if self.library_path.is_empty() && self.statistics_db.is_none() {
-            anyhow::bail!("Either --library-path or --statistics-db (or both) must be provided");
+    /// `allow_empty`: If true, bypasses the requirement for library_path or statistics_db
+    /// (used for initial setup mode).
+    pub fn validate(&self, allow_empty: bool) -> Result<()> {
+        // Se allow_empty for true (Setup Mode ou Dados já carregados via JSON no app.rs), 
+        // não devemos forçar a presença de argumentos de linha de comando.
+        if !allow_empty && self.library_path.is_empty() && self.statistics_db.is_none() {
+            anyhow::bail!("Either --library-path or --statistics-db (or both) must be provided, or configure via Web UI.");
         }
 
-        // Validate library paths if provided
+        // Valida caminhos APENAS se eles foram passados via CLI
         for library_path in &self.library_path {
             if !library_path.exists() {
                 anyhow::bail!("Library path does not exist: {:?}", library_path);
@@ -191,10 +194,11 @@ impl Cli {
         }
 
         // Validate statistics database if provided
-        if let Some(ref stats_path) = self.statistics_db
-            && !stats_path.exists()
-        {
-            anyhow::bail!("Statistics database does not exist: {:?}", stats_path);
+        // Fixed: Adjusted to standard nested if-let to avoid unstable features if compiler complains
+        if let Some(ref stats_path) = self.statistics_db {
+            if !stats_path.exists() {
+                 anyhow::bail!("Statistics database does not exist: {:?}", stats_path);
+            }
         }
 
         // Validate heatmap scale max

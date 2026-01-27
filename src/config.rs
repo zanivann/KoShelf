@@ -3,6 +3,51 @@
 use crate::library::MetadataLocation;
 use crate::time_config::TimeConfig;
 use std::path::PathBuf;
+use serde::{Serialize, Deserialize};
+use std::fs;
+
+/// Persistent settings structure (saved to settings.json)
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+pub struct AppSettings {
+    pub library_paths: Vec<PathBuf>,
+    pub statistics_db_path: Option<PathBuf>,
+    pub language: String,
+}
+
+impl AppSettings {
+    /// Loads settings from the local JSON file
+    pub fn load() -> Option<Self> {
+        let path = std::path::Path::new("settings.json");
+        if path.exists() {
+            match fs::read_to_string(path) {
+                Ok(content) => match serde_json::from_str(&content) {
+                    Ok(settings) => {
+                        log::info!("Loaded settings from settings.json");
+                        Some(settings)
+                    },
+                    Err(e) => {
+                        log::error!("Failed to parse settings.json: {}", e);
+                        None
+                    }
+                },
+                Err(e) => {
+                    log::error!("Failed to read settings.json: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Persists settings to the local JSON file
+    pub fn save(&self) -> anyhow::Result<()> {
+        let content = serde_json::to_string_pretty(self)?;
+        fs::write("settings.json", content)?;
+        log::info!("Settings saved to settings.json");
+        Ok(())
+    }
+}
 
 /// Configuration for site generation and file watching.
 #[derive(Clone)]

@@ -1,5 +1,5 @@
 # ===========================================
-#      Portuguese (pt) — Base Language File
+#       Portuguese (pt) — Base Language File
 # ===========================================
 # This is the base translation file for Portuguese, using Brazilian Portuguese (pt_BR).
 # Regional variants (e.g., pt_PT.ftl) should only override keys that differ.
@@ -290,7 +290,41 @@ minutes_label = { $count ->
 }
 
 # -----------------------------------
-#             Settings
+#            Settings
 # -----------------------------------
 settings = Configurações
 language = Idioma
+# Setup Screen
+setup-title = Bem-vindo ao KoShelf
+setup-description = Parece ser a sua primeira vez aqui. Configure a sua biblioteca para começar.
+setup-library-path = Caminho da Pasta de Livros
+setup-library-path-placeholder = /caminho/para/os/seus/livros
+setup-stats-path = Banco de Dados de Estatísticas (Opcional)
+setup-stats-path-placeholder = /caminho/para/statistics.sqlite3
+setup-language = Idioma
+setup-save = Guardar Configuração
+setup-success = Configuração Guardada!
+setup-restart-msg = Por favor, reinicie a aplicação para carregar a sua biblioteca.
+# Sidebar & Navigation
+nav-library-settings = Configuração da Biblioteca
+
+# Setup / Configuration Screen
+setup-title-welcome = Bem-vindo ao KoShelf
+setup-title-settings = Configuração da Biblioteca
+setup-desc-welcome = Por favor, configure sua biblioteca para começar.
+setup-desc-settings = Atualize os caminhos abaixo. O servidor reiniciará automaticamente.
+setup-label-books = Caminho da Pasta de Livros
+setup-label-stats = Banco de Dados de Estatísticas (Opcional)
+setup-label-language = Idioma do Sistema
+setup-placeholder-books = /caminho/para/livros
+setup-placeholder-stats = /caminho/para/statistics.sqlite3
+setup-btn-browse = Procurar
+setup-btn-start = Iniciar KoShelf
+setup-btn-save = Salvar e Reiniciar
+setup-modal-title = Selecionar Pasta
+setup-modal-up = ⬆️ Subir Nível
+setup-modal-cancel = Cancelar
+setup-modal-select = Selecionar Esta Pasta
+setup-error-load = Erro ao carregar caminho
+setup-status-saving = Salvando e Reiniciando...
+setup-btn-try-again = Tentar Novamente

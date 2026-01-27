@@ -4,12 +4,12 @@ use actix_web::{web, App, HttpServer, middleware, HttpResponse, Responder};
 use std::path::PathBuf;
 use std::sync::Arc;
 use anyhow::Result;
-use serde::Deserialize; // Necessário para ler o JSON do frontend
+use serde::Deserialize;
 
 use crate::models::LibraryItem;
 use crate::server::version::VersionNotifier;
-// Importamos a função de lista e a de definir o idioma global
 use crate::i18n::{get_available_locales, set_global_locale};
+use crate::config::AppSettings;
 
 pub struct WebServer {
     output_dir: PathBuf,
@@ -17,55 +17,181 @@ pub struct WebServer {
     version_notifier: Arc<VersionNotifier>,
     library_items: Arc<Vec<LibraryItem>>,
     library_path: PathBuf,
-    statistics_db_path: Option<PathBuf>, // <--- ADD FIELD
+    statistics_db_path: Option<PathBuf>, 
 }
 
-// Estrutura para receber o JSON { "lang": "pt" }
 #[derive(Deserialize)]
 struct LanguagePayload {
     lang: String,
 }
 
-// --- HANDLERS INDEPENDENTES ---
+#[derive(Deserialize)]
+struct SetupPayload {
+    library_paths: Vec<String>,
+    statistics_db_path: Option<String>,
+    language: String,
+}
 
-// Retorna a lista de idiomas para o Dropdown
+#[derive(Deserialize)]
+struct BrowseQuery {
+    path: Option<String>,
+}
+
+// --- HANDLERS ---
+
+async fn index_handler(output_dir: web::Data<PathBuf>) -> impl Responder {
+    let index_path = output_dir.get_ref().join("index.html");
+    if !index_path.exists() {
+        // Setup Inicial
+        return HttpResponse::Ok()
+            .content_type("text/html; charset=utf-8")
+            .body(include_str!("../../templates/setup.html"));
+    }
+    match std::fs::read_to_string(index_path) {
+        Ok(content) => HttpResponse::Ok().content_type("text/html; charset=utf-8").body(content),
+        Err(_) => HttpResponse::NotFound().finish(),
+    }
+}
+
+// Handler específico para servir a página de configuração quando solicitado via menu
+async fn library_settings_page_handler() -> impl Responder {
+    HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(include_str!("../../templates/setup.html"))
+}
+
+// Retorna a configuração atual (JSON) para preencher o formulário
+async fn get_config_handler() -> impl Responder {
+    match AppSettings::load() {
+        Some(settings) => HttpResponse::Ok().json(settings),
+        None => HttpResponse::NotFound().json(serde_json::json!({"error": "No settings found"}))
+    }
+}
+
+async fn browse_handler(query: web::Query<BrowseQuery>) -> impl Responder {
+    let root = query.path.clone().unwrap_or_else(|| "/".to_string());
+    let path = PathBuf::from(&root);
+
+    if !path.exists() {
+         return HttpResponse::Ok().json(serde_json::json!({ 
+             "error": "Path not found", 
+             "current": root, 
+             "parent": null,
+             "entries": [] 
+         }));
+    }
+
+    let mut directories = Vec::new();
+    let parent = path.parent().map(|p| p.to_string_lossy().to_string());
+
+    if let Ok(entries) = std::fs::read_dir(&path) {
+        for entry in entries.flatten() {
+            if let Ok(file_type) = entry.file_type() {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') { continue; }
+
+                let is_sqlite = name.ends_with(".sqlite3");
+                
+                if file_type.is_dir() || is_sqlite {
+                    directories.push(serde_json::json!({
+                        "name": name,
+                        "path": entry.path().to_string_lossy(),
+                        "type": if file_type.is_dir() { "dir" } else { "file" }
+                    }));
+                }
+            }
+        }
+    }
+    
+    directories.sort_by(|a, b| {
+        let type_a = a["type"].as_str().unwrap();
+        let type_b = b["type"].as_str().unwrap();
+        if type_a == type_b {
+            a["name"].as_str().unwrap().cmp(b["name"].as_str().unwrap())
+        } else {
+            type_a.cmp(type_b) 
+        }
+    });
+    
+    HttpResponse::Ok().json(serde_json::json!({
+        "current": path.to_string_lossy(),
+        "parent": parent,
+        "entries": directories
+    }))
+}
+
 async fn get_languages_handler() -> impl Responder {
     let languages = get_available_locales();
     HttpResponse::Ok().json(languages)
 }
 
-// CHANGE: Update handler signature and logic
+async fn setup_handler(payload: web::Json<SetupPayload>) -> impl Responder {
+    let library_paths: Vec<PathBuf> = payload.library_paths.iter().map(PathBuf::from).collect();
+    let stats_path = payload.statistics_db_path.as_ref().map(PathBuf::from);
+
+    // Validação simples
+    for path in &library_paths {
+        if !path.exists() || !path.is_dir() {
+             return HttpResponse::BadRequest().body(format!("Invalid library path: {:?}", path));
+        }
+    }
+    if let Some(ref p) = stats_path {
+        if !p.exists() {
+             return HttpResponse::BadRequest().body(format!("Invalid statistics DB path: {:?}", p));
+        }
+    }
+
+    let settings = AppSettings {
+        library_paths,
+        statistics_db_path: stats_path,
+        language: payload.language.clone(),
+    };
+
+    if let Err(e) = settings.save() {
+        log::error!("Failed to save settings: {}", e);
+        return HttpResponse::InternalServerError().body(format!("Error saving settings: {}", e));
+    }
+
+    log::info!("Configuration saved. Scheduling restart...");
+
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+        log::info!("Restarting system now...");
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            let exe = std::env::current_exe().unwrap_or_else(|_| PathBuf::from("koshelf"));
+            let _ = std::process::Command::new(exe).exec();
+        }
+    });
+
+    HttpResponse::Ok().json(serde_json::json!({ 
+        "status": "success", 
+        "message": "Configuration saved. Restarting..." 
+    }))
+}
+
 async fn set_language_handler(
     payload: web::Json<LanguagePayload>,
     library: web::Data<Arc<Vec<LibraryItem>>>,
     output_dir: web::Data<PathBuf>,
-    stats_path: web::Data<Option<PathBuf>>, // <--- INJECT DATA
+    stats_path: web::Data<Option<PathBuf>>,
 ) -> impl Responder {
     let new_lang = payload.lang.clone();
-    
-    log::info!("Mudando idioma para '{}' e regenerando site...", new_lang);
-    
     set_global_locale(new_lang);
 
     let items = library.get_ref().clone();
     let out_path = output_dir.get_ref().clone();
-    let db_path = stats_path.get_ref().clone(); // <--- CLONE PATH
+    let db_path = stats_path.get_ref().clone();
 
     let result = web::block(move || {
-        // CHANGE: Pass db_path to generate_site
         crate::site_generator::generate_site(&items, &out_path, db_path)
     }).await;
 
     match result {
         Ok(Ok(_)) => HttpResponse::Ok().json(serde_json::json!({ "status": "regenerated" })),
-        Ok(Err(e)) => {
-            log::error!("Erro na regeneração: {:?}", e);
-            HttpResponse::InternalServerError().body(format!("Erro: {}", e))
-        },
-        Err(e) => {
-            log::error!("Erro no blocking: {:?}", e);
-            HttpResponse::InternalServerError().finish()
-        }
+        Ok(Err(e)) => HttpResponse::InternalServerError().body(format!("Error: {}", e)),
+        Err(_) => HttpResponse::InternalServerError().finish()
     }
 }
 
@@ -76,7 +202,7 @@ impl WebServer {
         version_notifier: Arc<VersionNotifier>,
         library_items: Arc<Vec<LibraryItem>>,
         library_path: PathBuf,
-        statistics_db_path: Option<PathBuf>, // <--- ADD ARGUMENT
+        statistics_db_path: Option<PathBuf>,
     ) -> Self {
         Self {
             output_dir,
@@ -84,7 +210,7 @@ impl WebServer {
             version_notifier,
             library_items,
             library_path,
-            statistics_db_path, // <--- STORE IT
+            statistics_db_path,
         }
     }
 
@@ -95,7 +221,12 @@ impl WebServer {
                 .route("/events/version", web::get().to(Self::version_events_handler))
                 .route("/languages", web::get().to(get_languages_handler))
                 .route("/settings/language", web::post().to(set_language_handler))
+                .route("/setup", web::post().to(setup_handler))
+                .route("/config", web::get().to(get_config_handler)) // <--- NOVA ROTA (GET CONFIG)
+                .route("/browse", web::get().to(browse_handler))
         );
+        // Rota para a página HTML de configuração
+        cfg.route("/library-settings", web::get().to(library_settings_page_handler));
     }
 
     async fn version_events_handler() -> impl Responder {
@@ -115,7 +246,7 @@ impl WebServer {
             let percent = item.koreader_metadata.as_ref()
                 .and_then(|m| m.percent_finished)
                 .unwrap_or(0.0);
-
+            
             let status_debug = match &item.koreader_metadata {
                 Some(meta) => format!("{:?}", meta).to_lowercase(),
                 None => String::new(),
@@ -147,18 +278,16 @@ impl WebServer {
         let version_notifier = self.version_notifier.clone();
         let library_path = self.library_path.clone();
         let output_dir_data = self.output_dir.clone();
-        
-        // CHANGE: Capture stats path for injection
         let stats_path_data = self.statistics_db_path.clone();
 
-        log::info!("Aguardando sincronização da biblioteca...");
+        log::info!("Waiting for library items to be ready...");
         let mut retry_count = 0;
         while library_items.is_empty() && retry_count < 10 {
             tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
             retry_count += 1;
         }
 
-        log::info!("Iniciando servidor na porta {} (Itens: {})", self.port, library_items.len());
+        log::info!("Starting server on port {} (Items: {})", self.port, library_items.len());
 
         HttpServer::new(move || {
             let logger = middleware::Logger::default()
@@ -173,11 +302,17 @@ impl WebServer {
                 .app_data(web::Data::new(library_items.clone()))
                 .app_data(web::Data::new(version_notifier.clone()))
                 .app_data(web::Data::new(output_dir_data.clone()))
-                // CHANGE: Inject statistics_db_path
                 .app_data(web::Data::new(stats_path_data.clone())) 
                 .configure(Self::configure_api)
+                // Serve arquivos brutos (livros)
                 .service(fs::Files::new("/raw", library_path.clone()).show_files_listing())
-                .service(fs::Files::new("/", output_dir.clone()).index_file("index.html"))
+                // Rota específica para a raiz (decide entre Setup ou Home)
+                .route("/", web::get().to(index_handler))
+                // Rota para arquivos estáticos (CSS, JS, e Subpáginas como /calendar/)
+                .service(
+                    fs::Files::new("/", output_dir.clone())
+                        .index_file("index.html") // <--- ESSA LINHA CORRIGE O ERRO DE DIRETÓRIO
+                )
         })
         .bind(("0.0.0.0", self.port))?
         .run()
