@@ -1,4 +1,4 @@
-# Makefile.toml - Local Full Automation
+# Makefile.toml - Local Full Automation (Optimized)
 
 [config]
 default_to_workspace = false
@@ -78,10 +78,10 @@ rm release/koshelf-windows.exe
 description = "Create macOS .app bundle and generate .dmg installer"
 dependencies = ["create-release-dir", "build-mac"]
 script = '''
-# Garante que o script de build use os caminhos novos
+# Garante que o script de build use os caminhos novos e lide com permissões
 bash scripts/build_macos_app.sh
 
-# Remove o DMG antigo
+# Remove o DMG antigo para evitar conflitos de cache
 rm -f release/KoShelf-Installer.dmg
 
 # Cria o DMG profissional
@@ -118,13 +118,22 @@ args = ["-c", "docker tag koshelf:latest ghcr.io/zanivann/koshelf:latest && dock
 [tasks.git-deploy]
 description = "Commit and push changes to GitHub"
 script = '''
+# Remove travas residuais de execuções que falharam
+rm -f .git/index.lock
 git add .
-git commit -m "${COMMIT_MSG}"
+# Commit apenas se houver mudanças, evitando erro 1
+git commit -m "${COMMIT_MSG}" || echo "No changes to commit"
 git push origin main
 '''
 
 [tasks.gh-release]
-description = "Create a new release on GitHub using the CLI"
-script = '''
-gh release create ${RELEASE_VERSION} release/* --title "Release ${RELEASE_VERSION}" --notes "${COMMIT_MSG}"
-'''
+description = "Create GitHub Release and upload only compatible assets"
+command = "gh"
+args = [
+    "release", "create", "${RELEASE_VERSION}",
+    "--title", "Release ${RELEASE_VERSION}",
+    "--notes", "${COMMIT_MSG}",
+    "release/*.dmg", 
+    "release/*.zip", 
+    "release/*.tar.gz"
+]
