@@ -1,6 +1,7 @@
+// fileName: src/main.rs
 use anyhow::Result;
 use clap::Parser;
-use koshelf::{Cli, run};
+use koshelf::{Cli, run}; // Importa a struct Cli e a função run da biblioteca
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -8,6 +9,7 @@ async fn main() -> Result<()> {
         .filter_level(log::LevelFilter::Info)
         .parse_default_env()
         .init();
+    
     let cli = Cli::parse();
 
     // Handle --github flag
@@ -21,5 +23,7 @@ async fn main() -> Result<()> {
         println!("{}", koshelf::i18n::list_supported_languages());
         return Ok(());
     }
+
+    // Passa o controle para a função run definida no app.rs (via lib.rs)
     run(cli).await
 }

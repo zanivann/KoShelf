@@ -28,10 +28,11 @@ use utils::{NavContext, UiContext};
 // --- FUNÇÃO GLOBAL DE GERAÇÃO (Usada pelo web.rs) ---
 
 /// Helper function to trigger full site regeneration from Web Server API.
+/// ATUALIZADO: Agora aceita statistics_db_path para garantir que usamos o banco correto.
 pub fn generate_site(
     library: &Vec<LibraryItem>, 
     output_dir: &Path, 
-    statistics_db_path: Option<PathBuf> // <--- NEW ARGUMENT
+    statistics_db_path: Option<PathBuf>
 ) -> Result<()> {
     // 1. Get current global language
     let lang = crate::i18n::get_global_locale();
@@ -42,9 +43,9 @@ pub fn generate_site(
     // 2. Reconstruct minimal configuration needed for generation.
     let config = SiteConfig {
         output_dir: output_dir.to_path_buf(),
-        library_paths: vec![],
+        library_paths: vec![], // Não precisamos re-escanear, já temos os itens
         metadata_location: MetadataLocation::default(), 
-        statistics_db_path: statistics_db_path, // <--- USE IT HERE
+        statistics_db_path: statistics_db_path, // <--- CRUCIAL: Passa o caminho do banco
         language: lang,
         site_title: "KoShelf Library".to_string(),
         include_unread: true, 
@@ -166,21 +167,67 @@ impl SiteGenerator {
         }
     }
 
+    // CORRIGIDO: Agora carrega estatísticas do DB corretamente mesmo quando chamado via web
     async fn build_context_from_items(&self, items: Vec<LibraryItem>) -> Result<GenerationContext> {
         let all_items = items;
         let books: Vec<_> = all_items.iter().filter(|b| b.is_book()).cloned().collect();
         let comics: Vec<_> = all_items.iter().filter(|b| b.is_comic()).cloned().collect();
 
-        let has_books = !books.is_empty();
-        let has_comics = !comics.is_empty();
-        let stats_data = None; 
+        // 1. Tenta carregar estatísticas se o path estiver configurado
+        let mut stats_data = if let Some(ref stats_path) = self.statistics_db_path {
+            if stats_path.exists() {
+                info!("Loading statistics from {:?}", stats_path);
+                let mut data = StatisticsParser::parse(stats_path)?;
+                
+                if self.min_pages_per_day.is_some() || self.min_time_per_day.is_some() {
+                    StatisticsCalculator::filter_stats(&mut data, &self.time_config, self.min_pages_per_day, self.min_time_per_day);
+                }
+                
+                // Se necessário, filtra apenas para os itens da biblioteca atual
+                if !self.include_all_stats && !all_items.is_empty() {
+                    let mut library_md5s = HashSet::new();
+                    for item in &all_items {
+                         if let Some(md5) = item.koreader_metadata.as_ref().and_then(|m| m.partial_md5_checksum.clone()) {
+                             library_md5s.insert(md5);
+                         } else if let Ok(md5) = calculate_partial_md5(&item.file_path) {
+                             library_md5s.insert(md5);
+                         }
+                    }
+                    StatisticsCalculator::filter_to_library(&mut data, &library_md5s);
+                }
+                
+                StatisticsCalculator::populate_completions(&mut data, &self.time_config);
+                Some(data)
+            } else {
+                warn!("Statistics database path provided but file not found: {:?}", stats_path);
+                None
+            }
+        } else {
+            None
+        };
+
         let recap_latest_href = Self::recap_latest_href(stats_data.as_ref());
 
         let nav = NavContext {
-            has_books,
-            has_comics,
+            has_books: !books.is_empty(),
+            has_comics: !comics.is_empty(),
             stats_at_root: stats_data.is_some() && all_items.is_empty(),
         };
+
+        // 2. Marcação de ContentType para diferenciar livros/comics nas estatísticas
+        if let Some(ref mut sd) = stats_data {
+            let mut md5_to_content_type: HashMap<String, ContentType> = HashMap::new();
+            for item in &all_items {
+                let md5 = item.koreader_metadata.as_ref()
+                    .and_then(|m| m.partial_md5_checksum.as_ref())
+                    .cloned()
+                    .or_else(|| calculate_partial_md5(&item.file_path).ok());
+                if let Some(md5) = md5 {
+                    md5_to_content_type.insert(md5, item.content_type());
+                }
+            }
+            sd.tag_content_types(&md5_to_content_type);
+        }
 
         Ok(GenerationContext { all_items, books, comics, stats_data, recap_latest_href, nav })
     }

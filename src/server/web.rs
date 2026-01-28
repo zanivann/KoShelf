@@ -61,8 +61,12 @@ async fn library_settings_page_handler() -> impl Responder {
 }
 
 // Retorna a configuração atual (JSON) para preencher o formulário
-async fn get_config_handler() -> impl Responder {
-    match AppSettings::load() {
+// ALTERADO: Agora recebe o stats_path para saber onde buscar o settings.json correto
+async fn get_config_handler(stats_path: web::Data<Option<PathBuf>>) -> impl Responder {
+    let current_db_path = stats_path.get_ref().as_deref();
+    let config_path = AppSettings::get_config_path(current_db_path);
+
+    match AppSettings::load_from_path(&config_path) {
         Some(settings) => HttpResponse::Ok().json(settings),
         None => HttpResponse::NotFound().json(serde_json::json!({"error": "No settings found"}))
     }
@@ -143,10 +147,12 @@ async fn setup_handler(payload: web::Json<SetupPayload>) -> impl Responder {
 
     let settings = AppSettings {
         library_paths,
-        statistics_db_path: stats_path,
+        statistics_db_path: stats_path.clone(), // Clone para uso no save()
         language: payload.language.clone(),
     };
 
+    // O método .save() atualizado vai olhar para settings.statistics_db_path
+    // e salvar o JSON na mesma pasta do SQLite.
     if let Err(e) = settings.save() {
         log::error!("Failed to save settings: {}", e);
         return HttpResponse::InternalServerError().body(format!("Error saving settings: {}", e));
@@ -175,9 +181,30 @@ async fn set_language_handler(
     payload: web::Json<LanguagePayload>,
     library: web::Data<Arc<Vec<LibraryItem>>>,
     output_dir: web::Data<PathBuf>,
-    stats_path: web::Data<Option<PathBuf>>,
+    stats_path: web::Data<Option<PathBuf>>, // Recebe o caminho atual do DB (estado do servidor)
 ) -> impl Responder {
     let new_lang = payload.lang.clone();
+    
+    // 1. Persistência: Salva a nova configuração no settings.json CORRETO
+    let current_db_path = stats_path.get_ref().as_deref();
+    let config_path = AppSettings::get_config_path(current_db_path);
+    
+    // Tenta carregar config existente para preservar paths, ou cria default se não existir
+    let mut settings = AppSettings::load_from_path(&config_path).unwrap_or_default();
+    
+    // Atualiza apenas o necessário
+    settings.language = new_lang.clone();
+    
+    // Garante que o path do DB está na struct para que o .save() saiba onde salvar
+    if settings.statistics_db_path.is_none() {
+        settings.statistics_db_path = stats_path.get_ref().clone();
+    }
+
+    if let Err(e) = settings.save() {
+        log::error!("Failed to persist language change to {:?}: {}", config_path, e);
+    }
+
+    // 2. Atualiza estado em memória e regenera
     set_global_locale(new_lang);
 
     let items = library.get_ref().clone();
@@ -222,7 +249,7 @@ impl WebServer {
                 .route("/languages", web::get().to(get_languages_handler))
                 .route("/settings/language", web::post().to(set_language_handler))
                 .route("/setup", web::post().to(setup_handler))
-                .route("/config", web::get().to(get_config_handler)) // <--- NOVA ROTA (GET CONFIG)
+                .route("/config", web::get().to(get_config_handler)) // Handler atualizado
                 .route("/browse", web::get().to(browse_handler))
         );
         // Rota para a página HTML de configuração

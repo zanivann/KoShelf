@@ -1,8 +1,9 @@
-//! KoShelf library crate.
-//!
-//! This crate backs the `koshelf` binary. Keeping most logic in `lib.rs` makes the
-//! codebase easier to test and refactor while keeping `src/main.rs` minimal.
+// fileName: src/lib.rs
 
+//! KoShelf library crate.
+//! This crate backs the `koshelf` binary.
+
+// Declaração dos módulos
 pub mod app;
 pub mod cli;
 pub mod config;
@@ -18,6 +19,7 @@ pub mod templates;
 pub mod time_config;
 pub mod utils;
 
+// Re-exportações (Isso permite que o main.rs use "koshelf::run" e "koshelf::Cli")
 pub use app::run;
 pub use cli::Cli;
 

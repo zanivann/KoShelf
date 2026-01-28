@@ -12,22 +12,19 @@ let loadPromise: Promise<void> | null = null;
 async function load(): Promise<void> {
     if (bundle) return;
     try {
-        const res = await fetch('/assets/json/locales.json');
+        // Cache-busting: ?t=TIMESTAMP
+        const res = await fetch(`/assets/json/locales.json?t=${Date.now()}`);
+        
         const data = (await res.json()) as { language: string; resources: string[] };
 
-        // Initialize bundle with the language from the server
         bundle = new FluentBundle(data.language);
 
-        // Add resources. The server sends them in priority order (Variant -> Base -> English).
-        // FluentBundle.addResource returns errors on duplicate keys, but adds all non-conflicting keys.
-        // This achieves the desired behavior: the first definition of a message wins.
         for (const resContent of data.resources) {
             const resource = new FluentResource(resContent);
             bundle.addResource(resource);
         }
     } catch (e) {
         console.warn('Failed to load translations:', e);
-        // Initialize empty fallback bundle to prevent null checks from failing
         bundle = new FluentBundle('en-US');
     }
 }
@@ -60,7 +57,6 @@ export const translation = {
         }
 
         // Handle attributes (key.attr)
-        // FluentBundle.getMessage returns the message. Attributes are accessed via message.attributes.
         let msgId = key;
         let attrId: string | undefined;
 

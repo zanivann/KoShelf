@@ -1,3 +1,5 @@
+// fileName: src/app.rs
+
 use crate::cli::{Cli, parse_time_to_seconds};
 use crate::config::{SiteConfig, AppSettings};
 use crate::library::{FileWatcher, MetadataLocation};
@@ -55,19 +57,28 @@ fn metadata_location(cli: &Cli) -> MetadataLocation {
     }
 }
 
+// A função run precisa ser pública para ser acessada pelo main.rs (via lib.rs)
 pub async fn run(cli: Cli) -> Result<()> {
     info!("Starting KOShelf...");
 
-    // 1. Load settings from JSON (if exists)
-    let saved_settings = AppSettings::load();
+    // 1. Lógica Inteligente de Carga:
+    // Se o CLI tiver --statistics-db, calculamos que o settings.json deve estar na mesma pasta.
+    // Se não, assume o diretório atual (comportamento padrão).
+    let config_path = AppSettings::get_config_path(cli.statistics_db.as_deref());
+    
+    // Tenta carregar as configurações desse caminho específico
+    let saved_settings = AppSettings::load_from_path(&config_path);
 
-    // 2. Check if we have CLI args that override settings
-    // We consider it an override if library_path is provided OR statistics_db is set via CLI.
+    if saved_settings.is_some() {
+        info!("Loaded configuration from {:?}", config_path);
+    }
+
+    // 2. Verifica se há argumentos de CLI que sobrescrevem as configurações salvas
     let has_cli_args = !cli.library_path.is_empty() || cli.statistics_db.is_some();
 
-    // 3. Resolve final configuration priority: CLI > Saved JSON > Setup Mode (Empty)
+    // 3. Resolve a configuração final (Prioridade: CLI > Arquivo Salvo > Padrão/Setup)
     let (final_library_paths, final_stats_path, final_language) = if has_cli_args {
-        // Option A: Configuration provided via CLI. Use it and SAVE it.
+        // Opção A: Configuração via CLI. Usamos e SALVAMOS.
         info!("Configuration provided via CLI.");
         
         let settings_to_save = AppSettings {
@@ -76,30 +87,27 @@ pub async fn run(cli: Cli) -> Result<()> {
             language: cli.language.clone(),
         };
         
-        // Persist for next run
+        // Persiste para a próxima execução.
+        // O método .save() (que está no config.rs) sabe onde salvar baseado no statistics_db_path.
         if let Err(e) = settings_to_save.save() {
             error!("Failed to save settings: {}", e);
         }
 
         (cli.library_path.clone(), cli.statistics_db.clone(), cli.language.clone())
     } else if let Some(settings) = saved_settings {
-        // Option B: No CLI args, but we have saved settings. Use them.
-        info!("Configuration loaded from settings.json.");
+        // Opção B: Sem argumentos de CLI, mas temos configurações salvas. Usamos elas.
         (settings.library_paths, settings.statistics_db_path, settings.language)
     } else {
-        // Option C: No CLI args, no settings.json. Enter Setup Mode.
-        info!("No configuration found. Entering Setup Mode.");
+        // Opção C: Nada encontrado. Entra em Modo Setup.
+        info!("No configuration found at {:?}. Entering Setup Mode.", config_path);
         (vec![], None, cli.language.clone())
     };
 
-    // 4. Validate inputs.
-    // FIX: We pass 'true' (allow_empty) if:
-    // a) We are strictly in Setup Mode (no paths found anywhere)
-    // b) We ALREADY have configuration (from JSON), so CLI args being empty is fine.
+    // 4. Validação
+    // Permitimos caminhos vazios SE estivermos em modo setup
     let has_any_config = !final_library_paths.is_empty() || final_stats_path.is_some();
     let is_setup_mode = !has_any_config;
 
-    // The validator should allow empty CLI args if we already have config from JSON OR if we want Setup Mode.
     cli.validate(has_any_config || is_setup_mode)?;
 
     let heatmap_scale_max = parse_time_to_seconds(&cli.heatmap_scale_max)?;
@@ -110,7 +118,7 @@ pub async fn run(cli: Cli) -> Result<()> {
     let time_config = TimeConfig::from_cli(&cli.timezone, &cli.day_start_time)?;
     let plan = plan_output(&cli)?;
 
-    // Construct the Config object using the RESOLVED paths, not just CLI defaults
+    // Constrói o objeto Config final
     let config = SiteConfig {
         output_dir: plan.output_dir.clone(),
         site_title: cli.title.clone(),
@@ -130,7 +138,7 @@ pub async fn run(cli: Cli) -> Result<()> {
     let site_generator = SiteGenerator::new(config.clone());
     site_generator.generate().await?;
     
-    // Scanner might return empty if no paths (Setup Mode), which is expected.
+    // O scanner pode retornar vazio se estivermos no modo Setup
     let scanner = crate::library::scanner::Scanner::new(config.clone());
     let library_items = Arc::new(scanner.scan().await?);
 
@@ -145,7 +153,7 @@ pub async fn run(cli: Cli) -> Result<()> {
             let version_notifier = create_version_notifier();
             let file_watcher = FileWatcher::new(config.clone(), Some(version_notifier.clone()));
             
-            // For the raw file server, use the first library path or fallback to current dir
+            // Para o servidor de arquivos brutos, usa o primeiro caminho da biblioteca ou fallback para "."
             let library_path_root = final_library_paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
 
             let web_server = WebServer::new(
