@@ -7,10 +7,12 @@ use crate::server::{WebServer, create_version_notifier};
 use crate::site_generator::SiteGenerator;
 use crate::time_config::TimeConfig;
 use anyhow::{Context, Result};
-use log::{info, error};
+use log::{info, error, warn};
 use tempfile::TempDir;
 use std::sync::Arc;
 use std::path::PathBuf;
+use std::env;
+use directories::ProjectDirs; // Nova dependência
 
 enum RunMode {
     StaticExport,
@@ -22,6 +24,45 @@ struct OutputPlan {
     output_dir: std::path::PathBuf,
     _temp_dir: Option<TempDir>,
     mode: RunMode,
+}
+
+// --- LÓGICA DE RESOLUÇÃO DE CONFIGURAÇÃO ---
+fn resolve_config_path() -> PathBuf {
+    // 1. Prioridade: Pasta atual (Modo Portátil ou Docker volume na raiz)
+    if let Ok(current_dir) = env::current_dir() {
+        let local_config = current_dir.join("settings.json");
+        if local_config.exists() {
+            info!("Config found in current directory: {:?}", local_config);
+            return local_config;
+        }
+    }
+
+    // 2. Prioridade: Pasta Padrão do Sistema (XDG no Linux, AppSupport no Mac)
+    if let Some(proj_dirs) = ProjectDirs::from("com", "zanivann", "koshelf") {
+        let config_dir = proj_dirs.config_dir();
+        let sys_config = config_dir.join("settings.json");
+        
+        if sys_config.exists() {
+            info!("Config found in system directory: {:?}", sys_config);
+            return sys_config;
+        }
+
+        // Se nenhum existe, o padrão para SALVAR será o do sistema (mais organizado)
+        // Mas se quisermos manter o comportamento "simples", podemos retornar o local.
+        // Para garantir compatibilidade com Docker sem volumes complexos, vamos preferir
+        // retornar o local se nada existir.
+        
+        // Descomente a linha abaixo se preferir salvar em ~/.config/koshelf por padrão
+        // return sys_config;
+    }
+
+    // 3. Fallback: Salvar na pasta atual (padrão antigo e Docker-friendly)
+    let fallback = env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("settings.json");
+        
+    info!("No configuration found. Will use default path: {:?}", fallback);
+    fallback
 }
 
 fn plan_output(cli: &Cli) -> Result<OutputPlan> {
@@ -57,54 +98,50 @@ fn metadata_location(cli: &Cli) -> MetadataLocation {
     }
 }
 
-// A função run precisa ser pública para ser acessada pelo main.rs (via lib.rs)
 pub async fn run(cli: Cli) -> Result<()> {
     info!("Starting KOShelf...");
 
-    // 1. Lógica Inteligente de Carga:
-    // Se o CLI tiver --statistics-db, calculamos que o settings.json deve estar na mesma pasta.
-    // Se não, assume o diretório atual (comportamento padrão).
-    let config_path = AppSettings::get_config_path(cli.statistics_db.as_deref());
-    
-    // Tenta carregar as configurações desse caminho específico
+    // Usa a nova lógica para descobrir onde está (ou onde será criado) o arquivo
+    let config_path = resolve_config_path();
+
+    // Tenta carregar
     let saved_settings = AppSettings::load_from_path(&config_path);
 
-    if saved_settings.is_some() {
-        info!("Loaded configuration from {:?}", config_path);
-    }
-
-    // 2. Verifica se há argumentos de CLI que sobrescrevem as configurações salvas
+    // Verifica CLI args
     let has_cli_args = !cli.library_path.is_empty() || cli.statistics_db.is_some();
 
-    // 3. Resolve a configuração final (Prioridade: CLI > Arquivo Salvo > Padrão/Setup)
+    // Resolve a configuração final
     let (final_library_paths, final_stats_path, final_language) = if has_cli_args {
-        // Opção A: Configuração via CLI. Usamos e SALVAMOS.
         info!("Configuration provided via CLI.");
         
+        // Garante que o diretório pai existe antes de tentar salvar
+        if let Some(parent) = config_path.parent() {
+            if !parent.exists() {
+                let _ = std::fs::create_dir_all(parent);
+            }
+        }
+
         let settings_to_save = AppSettings {
             library_paths: cli.library_path.clone(),
             statistics_db_path: cli.statistics_db.clone(),
             language: cli.language.clone(),
+            config_file_path: config_path.clone(),
         };
         
-        // Persiste para a próxima execução.
-        // O método .save() (que está no config.rs) sabe onde salvar baseado no statistics_db_path.
         if let Err(e) = settings_to_save.save() {
             error!("Failed to save settings: {}", e);
         }
 
         (cli.library_path.clone(), cli.statistics_db.clone(), cli.language.clone())
     } else if let Some(settings) = saved_settings {
-        // Opção B: Sem argumentos de CLI, mas temos configurações salvas. Usamos elas.
+        info!("Configuration loaded successfully.");
         (settings.library_paths, settings.statistics_db_path, settings.language)
     } else {
-        // Opção C: Nada encontrado. Entra em Modo Setup.
-        info!("No configuration found at {:?}. Entering Setup Mode.", config_path);
+        info!("Entering Setup Mode.");
         (vec![], None, cli.language.clone())
     };
 
-    // 4. Validação
-    // Permitimos caminhos vazios SE estivermos em modo setup
+    // Validação
     let has_any_config = !final_library_paths.is_empty() || final_stats_path.is_some();
     let is_setup_mode = !has_any_config;
 
@@ -118,7 +155,6 @@ pub async fn run(cli: Cli) -> Result<()> {
     let time_config = TimeConfig::from_cli(&cli.timezone, &cli.day_start_time)?;
     let plan = plan_output(&cli)?;
 
-    // Constrói o objeto Config final
     let config = SiteConfig {
         output_dir: plan.output_dir.clone(),
         site_title: cli.title.clone(),
@@ -138,7 +174,6 @@ pub async fn run(cli: Cli) -> Result<()> {
     let site_generator = SiteGenerator::new(config.clone());
     site_generator.generate().await?;
     
-    // O scanner pode retornar vazio se estivermos no modo Setup
     let scanner = crate::library::scanner::Scanner::new(config.clone());
     let library_items = Arc::new(scanner.scan().await?);
 
@@ -153,7 +188,6 @@ pub async fn run(cli: Cli) -> Result<()> {
             let version_notifier = create_version_notifier();
             let file_watcher = FileWatcher::new(config.clone(), Some(version_notifier.clone()));
             
-            // Para o servidor de arquivos brutos, usa o primeiro caminho da biblioteca ou fallback para "."
             let library_path_root = final_library_paths.first().cloned().unwrap_or_else(|| PathBuf::from("."));
 
             let web_server = WebServer::new(
@@ -162,7 +196,8 @@ pub async fn run(cli: Cli) -> Result<()> {
                 version_notifier, 
                 library_items,
                 library_path_root,
-                final_stats_path
+                final_stats_path,
+                config_path // Passa o caminho resolvido dinamicamente
             );
 
             info!("Server mode active. Port: {}", cli.port);
