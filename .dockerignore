@@ -1,0 +1,15 @@
+# Ignorar pastas de compilação pesadas
+target/
+node_modules/
+
+# Ignorar o histórico do Git
+.git/
+.github/
+
+# Ignorar os arquivos finais de release dentro do Docker
+# (Isso impede que o Docker tente copiar o instalador de 100MB 
+# para dentro de uma imagem que só precisa do binário de 20MB)
+release/
+*.dmg
+*.zip
+*.tar.gz
