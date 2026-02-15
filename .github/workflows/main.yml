@@ -1,15 +1,71 @@
-name: Docker Build and Publish (Multi-arch)
+name: Release and Docker Build
 
 on:
   push:
     branches: [ "main", "master" ]
+    tags: [ "v*" ] # Dispara o release quando você cria uma tag (ex: v1.8.3)
 
 env:
   REGISTRY: ghcr.io
-  # Removi a variável IMAGE_NAME antiga para evitar o erro de maiúsculas
+  BINARY_NAME: koshelf
 
 jobs:
-  build-and-push:
+  # 1. Compila os binários para Linux (x86 e ARM64)
+  build-binaries:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Cross
+        run: cargo install cross --git https://github.com/cross-rs/cross.git
+
+      - name: Build Binary
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Rename and Package
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar -czvf ../../../${{ env.BINARY_NAME }}-${{ matrix.target }}.tar.gz ${{ env.BINARY_NAME }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binary-${{ matrix.target }}
+          path: "*.tar.gz"
+
+  # 2. Cria o Release no GitHub e anexa os pacotes
+  create-release:
+    needs: build-binaries
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: binary-*
+          merge-multiple: true
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: "*.tar.gz"
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 3. Build e Push do Docker (Multi-arch)
+  docker-publish:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -19,10 +75,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Este passo converte o nome do repositório para minúsculas
       - name: Lowercase repo name
-        run: |
-          echo "REPO_LOWER=${GITHUB_REPOSITORY@L}" >> "${GITHUB_ENV}"
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY@L}" >> "${GITHUB_ENV}"
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -37,13 +91,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.REPO_LOWER }}
+          tags: |
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=semver,pattern={{version}}
+
       - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          # Agora usamos a variável REPO_LOWER que criamos no passo acima
-          tags: ${{ env.REGISTRY }}/${{ env.REPO_LOWER }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

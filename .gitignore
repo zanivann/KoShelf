@@ -24,3 +24,26 @@ Thumbs.db
 
 # Code signing secrets
 .env
+
+# Database / Local data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite-journal
+
+# Rust additional
+Cargo.lock.bak
+# Se você usa o cargo-expand ou ferramentas de análise
+tests/*.out
+
+# Compiled assets (se forem gerados por build)
+assets/static_build/
+
+# Mac specific
+.AppleDouble
+.LSOverride
+._*
+
+# Ferramentas de ambiente
+.env.local
+.env.*.local
