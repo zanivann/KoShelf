@@ -3,68 +3,29 @@ name: Release and Docker Build
 on:
   push:
     branches: [ "main", "master" ]
-    tags: [ "v*" ] # Isso é o que permite o release automático
+    tags: [ "v*" ]
 
 env:
   REGISTRY: ghcr.io
-  BINARY_NAME: koshelf
 
 jobs:
-  # Job 1: Compila os binários para Linux (x86 e ARM64)
-  build-binaries:
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
-    
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      - name: Install Cross
-        run: cargo install cross --git https://github.com/cross-rs/cross.git
-
-      - name: Build Binary
-        run: cross build --release --target ${{ matrix.target }}
-
-      - name: Rename and Package
-        run: |
-          cd target/${{ matrix.target }}/release
-          tar -czvf ../../../${{ env.BINARY_NAME }}-${{ matrix.target }}.tar.gz ${{ env.BINARY_NAME }}
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: binary-${{ matrix.target }}
-          path: "*.tar.gz"
-
-  # Job 2: Cria o Release no GitHub e anexa os arquivos
+  # Job 1: Cria apenas a entrada de Release no GitHub (sem arquivos pesados)
   create-release:
-    needs: build-binaries
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: binary-*
-          merge-multiple: true
+      - uses: actions/checkout@v4
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          files: "*.tar.gz"
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Job 3: Build e Push do Docker (Multi-arch)
+  # Job 2: Build e Push do Docker (Este já faz o pacote para o Raspberry Pi)
   docker-publish:
     runs-on: ubuntu-latest
     permissions:
@@ -105,6 +66,7 @@ jobs:
         with:
           context: .
           push: true
+          # O Docker Buildx já cria a imagem compatível com seu Raspberry Pi 5 (arm64)
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
