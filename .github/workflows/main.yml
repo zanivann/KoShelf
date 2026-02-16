@@ -10,7 +10,6 @@ on:
       - "v*"
 
 jobs:
-  # JOBS 1: Compilar Binários (Windows, Linux, ARM)
   build-binaries:
     name: Build ${{ matrix.target }}
     runs-on: ubuntu-latest
@@ -30,6 +29,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 1. Instala Node.js para compilar o CSS/Frontend fora do container
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 2. Compila os assets (CSS/JS) na máquina host (Ubuntu)
+      - name: Build Frontend Assets
+        run: |
+          npm ci
+          # Tenta rodar o build. Se não existir script 'build', roda o tailwind direto se necessário.
+          # Assumindo que seu package.json tem um script "build" que gera o CSS
+          npm run build --if-present 
+
+      # 3. Prepara o Rust
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
         with:
@@ -38,10 +52,19 @@ jobs:
       - name: Install Cross
         run: cargo install cross --git https://github.com/cross-rs/cross
 
+      # 4. Configura o Cross para aceitar a variável de pular o node
+      - name: Setup Cross Config
+        run: |
+          echo '[build.env]' > Cross.toml
+          echo 'passthrough = ["KOSHELF_SKIP_NODE_BUILD", "KOSHELF_SKIP_NPM_INSTALL"]' >> Cross.toml
+
+      # 5. Compila o binário pulando a etapa do Node (pois já fizemos no passo 2)
       - name: Build Binary
+        env:
+          KOSHELF_SKIP_NODE_BUILD: "true"
+          KOSHELF_SKIP_NPM_INSTALL: "true"
         run: cross build --verbose --locked --release --target ${{ matrix.target }}
 
-      # Renomeia e comprime para ficar bonito no release
       - name: Package
         shell: bash
         run: |
@@ -59,7 +82,6 @@ jobs:
           name: koshelf-${{ matrix.name }}
           path: ${{ matrix.name }}
 
-  # JOB 2: Criar Release no GitHub e subir os arquivos
   create-release:
     needs: [build-binaries]
     runs-on: ubuntu-latest
@@ -75,12 +97,20 @@ jobs:
           files: artifacts/*
           generate_release_notes: true
 
-  # JOB 3: Build e Push do Docker
   build-docker:
+    needs: [create-release] # Espera o release para garantir que o código é o mesmo
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       
+      # Precisamos compilar o front aqui também para o Docker
+      - name: Install Node.js for Docker build
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npm run build --if-present
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -94,7 +124,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata (tags, labels)
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -108,3 +138,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # Passamos as variáveis para o Dockerfile também não tentar rodar npm se não tiver node na imagem base
+          build-args: |
+            KOSHELF_SKIP_NODE_BUILD=true
