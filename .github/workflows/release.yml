@@ -1,0 +1,165 @@
+name: Release & Docker
+
+permissions:
+  contents: write
+  packages: write
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: linux-x86_64
+          - target: x86_64-pc-windows-gnu
+            os: ubuntu-latest
+            name: windows-x86_64.exe
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: linux-arm64
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1. Instala Node.js
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # 2. Compila os assets MANUALMENTE para garantir que existam na pasta 'prebuilt'
+      - name: Build and Prepare Assets
+        run: |
+          npm ci
+          mkdir -p prebuilt
+
+          echo "Building Main CSS..."
+          npx tailwindcss -i assets/css/input.css -o prebuilt/compiled_style.css --minify
+
+          echo "Building Calendar CSS..."
+          npx tailwindcss -i assets/css/calendar.css -o prebuilt/compiled_calendar.css --minify
+          # Faz o bundle do CSS do calendário (igual o build.rs faz)
+          npx esbuild prebuilt/compiled_calendar.css --bundle --minify --loader:.css=css --outfile=prebuilt/calendar.css
+
+          echo "Building TypeScript..."
+          # Compila os arquivos TS diretamente para a pasta prebuilt
+          npx esbuild assets/ts/app/base.ts \
+                      assets/ts/pages/library_list.ts \
+                      assets/ts/pages/item_detail.ts \
+                      assets/ts/pages/statistics.ts \
+                      assets/ts/pages/recap.ts \
+                      assets/ts/pages/calendar.ts \
+                      assets/ts/app/service-worker.ts \
+                      --bundle --format=esm --target=es2020 --minify --entry-names=[name] --outdir=prebuilt/
+          
+          echo "Assets prepared in prebuilt/:"
+          ls -la prebuilt/
+
+      # 3. Prepara o Rust
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      # 4. Configura o Cross
+      - name: Setup Cross Config
+        run: |
+          echo '[build.env]' > Cross.toml
+          echo 'passthrough = ["KOSHELF_SKIP_NODE_BUILD", "KOSHELF_SKIP_NPM_INSTALL"]' >> Cross.toml
+
+      # 5. Compila o binário (O build.rs vai pegar os arquivos da pasta prebuilt criada acima)
+      - name: Build Binary
+        env:
+          KOSHELF_SKIP_NODE_BUILD: "true"
+          KOSHELF_SKIP_NPM_INSTALL: "true"
+        run: cross build --verbose --locked --release --target ${{ matrix.target }}
+
+      - name: Package
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+          if [[ "${{ matrix.target }}" == "x86_64-pc-windows-gnu" ]]; then
+            cp koshelf.exe ../../../${{ matrix.name }}
+          else
+            cp koshelf ../../../${{ matrix.name }}
+          fi
+          cd -
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: koshelf-${{ matrix.name }}
+          path: ${{ matrix.name }}
+
+  create-release:
+    needs: [build-binaries]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
+
+  build-docker:
+    needs: [create-release]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Install Node.js for Docker build
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      
+      # Aqui repetimos o build simples pois o Dockerfile vai copiar
+      - run: npm ci
+      # Se seu package.json não tiver scripts, vamos garantir que os assets existam
+      # Criamos uma pasta dist/ ou assets/ compilada se necessário, mas o Dockerfile multi-stage cuida disso geralmente.
+      # Se seu Dockerfile usa "cargo build", ele vai precisar do KOSHELF_SKIP_NODE_BUILD também
+      
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            KOSHELF_SKIP_NODE_BUILD=true

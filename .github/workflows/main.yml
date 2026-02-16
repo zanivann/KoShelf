@@ -1,143 +1,39 @@
-name: Release & Docker
-
-permissions:
-  contents: write
-  packages: write
+name: CI (Tests & Check)
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  build-binaries:
-    name: Build ${{ matrix.target }}
+  test:
+    name: Test & Check
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
-            name: linux-x86_64
-          - target: x86_64-pc-windows-gnu
-            os: ubuntu-latest
-            name: windows-x86_64.exe
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-latest
-            name: linux-arm64
 
     steps:
-      - uses: actions/checkout@v4
+    - uses: actions/checkout@v4
 
-      # 1. Instala Node.js para compilar o CSS/Frontend fora do container
-      - name: Install Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+    # Precisamos do Node para garantir que o build.rs consiga compilar os assets
+    # (Mesmo que a gente não vá usar o binário final, precisamos ver se não tem erro no JS/CSS)
+    - name: Install Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: 20
+    
+    - name: Install Dependencies
+      run: npm ci
 
-      # 2. Compila os assets (CSS/JS) na máquina host (Ubuntu)
-      - name: Build Frontend Assets
-        run: |
-          npm ci
-          # Tenta rodar o build. Se não existir script 'build', roda o tailwind direto se necessário.
-          # Assumindo que seu package.json tem um script "build" que gera o CSS
-          npm run build --if-present 
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
 
-      # 3. Prepara o Rust
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
+    # 1. Verifica se o código compila (rápido)
+    - name: Check Code
+      run: cargo check --verbose
 
-      - name: Install Cross
-        run: cargo install cross --git https://github.com/cross-rs/cross
-
-      # 4. Configura o Cross para aceitar a variável de pular o node
-      - name: Setup Cross Config
-        run: |
-          echo '[build.env]' > Cross.toml
-          echo 'passthrough = ["KOSHELF_SKIP_NODE_BUILD", "KOSHELF_SKIP_NPM_INSTALL"]' >> Cross.toml
-
-      # 5. Compila o binário pulando a etapa do Node (pois já fizemos no passo 2)
-      - name: Build Binary
-        env:
-          KOSHELF_SKIP_NODE_BUILD: "true"
-          KOSHELF_SKIP_NPM_INSTALL: "true"
-        run: cross build --verbose --locked --release --target ${{ matrix.target }}
-
-      - name: Package
-        shell: bash
-        run: |
-          cd target/${{ matrix.target }}/release
-          if [[ "${{ matrix.target }}" == "x86_64-pc-windows-gnu" ]]; then
-            cp koshelf.exe ../../../${{ matrix.name }}
-          else
-            cp koshelf ../../../${{ matrix.name }}
-          fi
-          cd -
-
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: koshelf-${{ matrix.name }}
-          path: ${{ matrix.name }}
-
-  create-release:
-    needs: [build-binaries]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          path: artifacts
-          merge-multiple: true
-
-      - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: artifacts/*
-          generate_release_notes: true
-
-  build-docker:
-    needs: [create-release] # Espera o release para garantir que o código é o mesmo
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      
-      # Precisamos compilar o front aqui também para o Docker
-      - name: Install Node.js for Docker build
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - run: npm ci
-      - run: npm run build --if-present
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ghcr.io/${{ github.repository }}
-
-      - name: Build and push
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          # Passamos as variáveis para o Dockerfile também não tentar rodar npm se não tiver node na imagem base
-          build-args: |
-            KOSHELF_SKIP_NODE_BUILD=true
+    # 2. Roda os testes automatizados (se houver)
+    - name: Run Tests
+      run: cargo test --verbose
