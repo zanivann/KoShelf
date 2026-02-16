@@ -9,8 +9,17 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
-# Site output
+# Site output / Build Artifacts
 site/
+dist/
+pkg/
+
+# Generated Styles & Assets
+*.css.map
+*.min.css
+# Se o arquivo gerado tiver um nome fixo (ex: output.css ou tailwind.css), adicione abaixo:
+# output.css
+# static/style.css
 
 # IDE
 .vscode/
