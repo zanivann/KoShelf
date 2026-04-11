@@ -21,8 +21,9 @@ RUN cargo build --release
 FROM debian:bookworm-slim
 WORKDIR /app
 
+# --- A CORREÇÃO ESTÁ AQUI: Adicionado curl e wget ---
 RUN apt-get update && apt-get install -y \
-    libssl3 libsqlite3-0 ca-certificates \
+    libssl3 libsqlite3-0 ca-certificates curl wget \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiamos apenas o binário, que já contém o frontend embutido
