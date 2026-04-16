@@ -113,7 +113,8 @@ impl WebServer {
                 .app_data(web::Data::new(library_items.clone()))
                 .app_data(web::Data::new(version_notifier.clone()))
                 .configure(Self::configure_api)
-                .service(fs::Files::new("/books", library_path.clone()).show_files_listing())
+                // A correção da rota (shadowing) está aqui:
+                .service(fs::Files::new("/raw", library_path.clone()).show_files_listing())
                 .service(fs::Files::new("/settings", library_path.clone()))
                 .service(fs::Files::new("/", output_dir.clone()).index_file("index.html"))
         })
